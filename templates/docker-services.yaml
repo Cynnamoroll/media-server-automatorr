@@ -1,0 +1,397 @@
+# Service Definitions
+# All setup instructions are stored here
+
+services:
+  jellyfin:
+    name: Jellyfin
+    description: Free and open-source media server
+    category: media_server
+    port: 8096
+    image: jellyfin/jellyfin:latest
+    volumes:
+      /config: config
+      /cache: cache
+    media_volumes:
+      /data/movies: movies
+      /data/tv: tv
+      /data/music: music
+    env:
+      - TZ
+    setup_url: http://localhost:8096
+    setup_steps:
+      - Open Jellyfin in your browser
+      - Select your preferred language and click Next
+      - Create an admin username and password
+      - "Add media libraries by clicking 'Add Media Library':"
+      - "  - Select content type (Movies, Shows, Music, etc.)"
+      - "  - Add the appropriate folder path from /data/"
+      - Configure metadata language and country preferences
+      - Configure remote access settings based on your needs
+      - Complete the setup wizard
+      - "(Optional) Configure hardware transcoding in Dashboard > Playback > Transcoding based on your hardware"
+
+  plex:
+    name: Plex
+    description: Feature-rich media server (some features require Plex Pass)
+    category: media_server
+    port: 32400
+    extra_ports: [1900, 5353, 8324, 32410, 32412, 32413, 32414, 32469]
+    image: lscr.io/linuxserver/plex:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /movies: movies
+      /tv: tv
+      /music: music
+    env:
+      - PUID
+      - PGID
+      - TZ
+      - VERSION=docker
+    setup_url: http://localhost:32400/web
+    setup_steps:
+      - Open Plex in your browser
+      - Sign in or create a Plex account
+      - Give your server a name
+      - "Add media libraries:"
+      - "  - Click 'Add Library'"
+      - "  - Select library type (Movies, TV Shows, Music, etc.)"
+      - "  - Browse to the appropriate /movies, /tv, or /music folder"
+      - Configure library settings (scanner, agent, language)
+      - Complete the setup wizard
+      - "(Optional) Configure hardware transcoding in Settings > Transcoder based on your hardware"
+
+  sonarr:
+    name: Sonarr
+    description: TV show collection manager and automation
+    category: arr
+    port: 8989
+    image: lscr.io/linuxserver/sonarr:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /tv: tv
+      /downloads: downloads
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:8989
+    setup_steps:
+      - Open Sonarr in your browser
+      - Go to Settings > Media Management
+      - "Click 'Add Root Folder' and enter: /tv"
+      - Enable 'Rename Episodes' and configure naming format to your preference
+      - Go to Settings > Download Clients
+      - Add your download client (qBittorrent, SABnzbd, etc.)
+      - "  - Use container name as hostname (e.g., 'qbittorrent')"
+      - "  - Set the appropriate port and credentials"
+      - Go to Settings > General and note your API Key (needed for Prowlarr/Seerr)
+
+  radarr:
+    name: Radarr
+    description: Movie collection manager and automation
+    category: arr
+    port: 7878
+    image: lscr.io/linuxserver/radarr:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /movies: movies
+      /downloads: downloads
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:7878
+    setup_steps:
+      - Open Radarr in your browser
+      - Go to Settings > Media Management
+      - "Click 'Add Root Folder' and enter: /movies"
+      - Enable 'Rename Movies' and configure naming format to your preference
+      - Go to Settings > Download Clients
+      - Add your download client (qBittorrent, etc.)
+      - "  - Use container name as hostname (e.g., 'qbittorrent')"
+      - "  - Set the appropriate port and credentials"
+      - Go to Settings > General and note your API Key (needed for Prowlarr/Seerr)
+
+  lidarr:
+    name: Lidarr
+    description: Music collection manager and automation
+    category: arr
+    port: 8686
+    image: lscr.io/linuxserver/lidarr:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /music: music
+      /downloads: downloads
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:8686
+    setup_steps:
+      - Open Lidarr in your browser
+      - Go to Settings > Media Management
+      - "Click 'Add Root Folder' and enter: /music"
+      - Configure track and album naming formats to your preference
+      - Go to Settings > Download Clients and add your download client
+      - Go to Settings > General and note your API Key (needed for Prowlarr)
+
+  mylar3:
+    name: Mylar3
+    description: Comic book collection manager
+    category: arr
+    port: 8090
+    image: lscr.io/linuxserver/mylar3:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /comics: comics
+      /downloads: downloads
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:8090
+    setup_steps:
+      - Open Mylar3 in your browser
+      - Go to Settings > Web Interface and set up authentication
+      - Go to Settings > Download Settings and configure your download client
+      - Go to Settings > Search Providers and add your indexers
+      - Configure comic naming and organization preferences
+
+  prowlarr:
+    name: Prowlarr
+    description: Unified indexer manager for all *arr apps
+    category: indexer
+    port: 9696
+    image: lscr.io/linuxserver/prowlarr:latest
+    volumes:
+      /config: config
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:9696
+    setup_steps:
+      - Open Prowlarr in your browser
+      - Go to Indexers > Add Indexer
+      - Search for and add your preferred indexers
+      - Go to Settings > Apps
+      - "Click '+' to add each *arr app you installed:"
+      - "  - Prowlarr Server: http://prowlarr:9696"
+      - "  - App Server: http://<app-name>:<port> (e.g., http://radarr:7878)"
+      - "  - API Key: (from the app's Settings > General)"
+      - Repeat for each *arr app (Radarr, Sonarr, Lidarr, Readarr)
+      - If using FlareSolverr, add it in Settings > Indexers as a proxy
+
+  jackett:
+    name: Jackett
+    description: Alternative indexer proxy
+    category: indexer
+    port: 9117
+    image: lscr.io/linuxserver/jackett:latest
+    volumes:
+      /config: config
+      /downloads: downloads
+    env:
+      - PUID
+      - PGID
+      - TZ
+      - AUTO_UPDATE=true
+    setup_url: http://localhost:9117
+    setup_steps:
+      - Open Jackett in your browser
+      - Click 'Add Indexer' to add your preferred indexers
+      - For each indexer, click the wrench icon to configure
+      - Copy the Torznab feed URL and API key
+      - In your *arr apps, go to Settings > Indexers > Add
+      - Select 'Torznab' and paste the URL and API key from Jackett
+
+  qbittorrent:
+    name: qBittorrent
+    description: Torrent download client
+    category: downloader
+    port: 8080
+    extra_ports: [6881]
+    image: lscr.io/linuxserver/qbittorrent:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /downloads: downloads
+    env:
+      - PUID
+      - PGID
+      - TZ
+      - WEBUI_PORT=8080
+    setup_url: http://localhost:8080
+    setup_steps:
+      - Open qBittorrent in your browser
+      - "Default credentials: admin / adminadmin"
+      - "IMPORTANT: Immediately change the password in Tools > Options > Web UI"
+      - Go to Tools > Options > Downloads
+      - "  - Set 'Default Save Path' to: /downloads/complete"
+      - "  - Set 'Keep incomplete torrents in' to: /downloads/incomplete"
+      - Go to Tools > Options > BitTorrent
+      - "  - Configure seeding limits based on your preferences"
+      - "Create categories for each *arr app:"
+      - "  - Right-click in left panel > New Category"
+      - "  - Create: radarr, sonarr, lidarr, readarr (as needed)"
+
+  bazarr:
+    name: Bazarr
+    description: Automatic subtitle downloader for Radarr/Sonarr
+    category: companion
+    port: 6767
+    image: lscr.io/linuxserver/bazarr:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /movies: movies
+      /tv: tv
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:6767
+    setup_steps:
+      - Open Bazarr in your browser
+      - Go to Settings > Sonarr (if installed)
+      - "  - Enable Sonarr, set Address: sonarr, Port: 8989"
+      - "  - Enter API Key from Sonarr Settings > General"
+      - Go to Settings > Radarr (if installed)
+      - "  - Enable Radarr, set Address: radarr, Port: 7878"
+      - "  - Enter API Key from Radarr Settings > General"
+      - Go to Settings > Providers
+      - "  - Add subtitle providers (OpenSubtitles, Subscene, etc.)"
+      - Go to Settings > Languages
+      - "  - Configure your preferred subtitle languages"
+
+  seerr:
+    name: Seerr
+    description: Request management for Jellyfin and Plex
+    category: companion
+    port: 5055
+    image: seerr/seerr:latest
+    volumes:
+      /app/config: config
+    env:
+      - TZ
+    setup_url: http://localhost:5055
+    setup_steps:
+      - Open Seerr in your browser
+      - "Select your media server type (Jellyfin or Plex)"
+      - Sign in with your media server account
+      - "Add Radarr server (if installed):"
+      - "  - Hostname: radarr, Port: 7878"
+      - "  - API Key: (from Radarr Settings > General)"
+      - "Add Sonarr server (if installed):"
+      - "  - Hostname: sonarr, Port: 8989"
+      - "  - API Key: (from Sonarr Settings > General)"
+      - Import your media libraries
+      - Configure user permissions as desired
+
+  tautulli:
+    name: Tautulli
+    description: Plex monitoring and statistics
+    category: companion
+    port: 8181
+    image: lscr.io/linuxserver/tautulli:latest
+    volumes:
+      /config: config
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:8181
+    setup_steps:
+      - Open Tautulli in your browser
+      - Complete the setup wizard
+      - "Connect to your Plex server:"
+      - "  - Sign in with your Plex account, or"
+      - "  - Manually enter Plex server details"
+      - Configure notification agents if desired
+      - Explore the dashboard for viewing statistics
+
+  audiobookshelf:
+    name: Audiobookshelf
+    description: Audiobook and podcast server
+    category: companion
+    port: 13378
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    volumes:
+      /config: config
+      /metadata: metadata
+    media_volumes:
+      /audiobooks: audiobooks
+      /podcasts: podcasts
+    env:
+      - TZ
+    setup_url: http://localhost:13378
+    setup_steps:
+      - Open Audiobookshelf in your browser
+      - Create an admin account
+      - "Add libraries:"
+      - "  - Click 'Add Library'"
+      - "  - Select library type (Audiobooks or Podcasts)"
+      - "  - Add the appropriate folder path"
+      - Configure metadata providers in Settings
+      - Install mobile apps for on-the-go listening
+
+  homarr:
+    name: Homarr
+    description: Customizable dashboard for all services
+    category: dashboard
+    port: 7575
+    image: ghcr.io/homarr-labs/homarr:latest
+    volumes:
+      /appdata: config
+    extra_volumes:
+      /var/run/docker.sock: /var/run/docker.sock
+    env:
+      - TZ
+      - SECRET_ENCRYPTION_KEY
+    needs_encryption_key: true
+    setup_url: http://localhost:7575
+    setup_steps:
+      - Open Homarr in your browser
+      - Create an admin account
+      - Click 'Add Tile' to add your services to the dashboard
+      - "For each service, you can add:"
+      - "  - App tiles with direct links"
+      - "  - Integration tiles that show status/stats"
+      - Configure integrations by entering service URLs and API keys
+      - Customize the layout by dragging and arranging tiles
+
+  flaresolverr:
+    name: FlareSolverr
+    description: Cloudflare bypass proxy for indexers
+    category: utility
+    port: 8191
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    volumes: {}
+    env:
+      - TZ
+      - LOG_LEVEL=info
+    setup_url: null
+    setup_steps:
+      - FlareSolverr runs automatically - no web interface needed
+      - "To use with Prowlarr:"
+      - "  - Go to Prowlarr > Settings > Indexers"
+      - "  - Add a new proxy with URL: http://flaresolverr:8191"
+      - "  - Tag it appropriately (e.g., 'flaresolverr')"
+      - "  - Apply this tag to indexers that need Cloudflare bypass"
+      - "To use with Jackett:"
+      - "  - Go to Jackett settings"
+      - "  - Set FlareSolverr URL to: http://flaresolverr:8191"
+
+categories:
+  media_server: Media Servers
+  arr: "*Arr Suite (Media Management)"
+  indexer: Indexers
+  downloader: Download Clients
+  companion: Companion Apps
+  dashboard: Dashboards
+  utility: Utilities
