@@ -114,7 +114,8 @@ docker compose down
 docker compose logs -f
 
 # Update all containers
-docker compose pull &amp;&amp; docker compose up -d
+docker compose pull
+docker compose up -d
 
 # Check status
 docker compose ps
