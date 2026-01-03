@@ -61,6 +61,32 @@ services:
       - Complete the setup wizard
       - "(Optional) Configure hardware transcoding in Settings > Transcoder based on your hardware"
 
+emby:
+  name: Emby
+  description: Personal media server with live TV support
+  category: media_server
+  port: 8096
+  image: lscr.io/linuxserver/emby:latest
+  volumes:
+    /config: config
+  media_volumes:
+    /data/tvshows: tv
+    /data/movies: movies
+    /data/music: music
+  env:
+    - PUID
+    - PGID
+    - TZ
+  setup_url: http://localhost:8096
+  setup_steps:
+    - Open Emby in your browser
+    - Complete the initial setup wizard
+    - Create your admin account
+    - Add media libraries (TV Shows, Movies, Music)
+    - Point each library to the appropriate /data folder
+    - Configure remote access settings if needed
+    - Install any desired plugins from the catalog
+
   sonarr:
     name: Sonarr
     description: TV show collection manager and automation
@@ -274,7 +300,7 @@ services:
     description: Request management for Jellyfin and Plex
     category: companion
     port: 5055
-    image: seerr/seerr:latest
+    image: seerr/seerr:develop
     volumes:
       /app/config: config
     env:

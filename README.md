@@ -37,6 +37,7 @@ Inspired by the [ezarr project](https://github.com/Luctia/ezarr) but written fro
 
   - **Jellyfin** - Free and open-source media server
   - **Plex** - Feature-rich media server (some features require Plex Pass)
+  - **Emby** - Personal media server with live TV support
 
 ### *Arr Suite (Media Management)
 

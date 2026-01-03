@@ -651,13 +651,13 @@ class MediaServerSetup:
         exclusive_choices = [
             {
                 "name": "Media Server",
-                "options": ["jellyfin", "plex"],
-                "default": 1,
+                "options": ["jellyfin", "plex", "emby"],
+                "default": 1,  # Jellyfin
             },
             {
                 "name": "Indexer Manager",
                 "options": ["prowlarr", "jackett"],
-                "default": 1,
+                "default": 1,  # Prowlarr
             },
         ]
 
@@ -996,6 +996,7 @@ class MediaServerSetup:
             "audiobookshelf",
             "jellyfin",
             "plex",
+            "emby",
             "seerr",
             "tautulli",
             "homarr",
