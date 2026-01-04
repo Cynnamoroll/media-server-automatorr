@@ -413,6 +413,81 @@ services:
       - "  - Go to Jackett settings"
       - "  - Set FlareSolverr URL to: http://flaresolverr:8191"
 
+  gluetun:
+    name: gluetun
+    description: VPN client for secure torrenting and Usenet
+    category: utility
+    port: 8000
+    image: qdm12/gluetun:latest
+    volumes:
+      /gluetun: /gluetun
+    extra_volumes:
+      /etc/localtime: /etc/localtime:ro
+    env:
+      - TZ
+      # See https://github.com/qdm12/gluetun-wiki/tree/main/setup#setup
+      - VPNSP=your_provider # e.g., nordvpn, protonvpn
+      - OPENVPN_USER=your_username
+      - OPENVPN_PASSWORD=your_password
+      - FIREWALL=on
+      - FIREWALL_OUTBOUND_SUBNETS=192.168.0.0/16 # Allow local network access
+    setup_url: null
+    setup_steps:
+      - Configure environment variables with your VPN credentials
+      - "Set VPNSP to your provider (nordvpn, protonvpn, etc.)"
+      - "Set OPENVPN_USER and OPENVPN_PASSWORD"
+      - "Set FIREWALL_OUTBOUND_SUBNETS to your docker network (e.g., 172.20.0.0/16)"
+      - "All traffic from connected containers will route through VPN"
+      - "Use network_mode: service:gluetun for other containers to use VPN"
+
+  nzbget:
+    name: NZBGet
+    description: High-performance Usenet download client
+    category: download
+    port: 6789
+    image: lscr.io/linuxserver/nzbget:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /data: . # Mount entire media dir as /data
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:6789
+    setup_steps:
+      - Open NZBGet in your browser
+      - "Default login: admin / tegbzn6789"
+      - "Go to Settings > Paths"
+      - "Set Destination directory: /data/downloads/complete"
+      - "Set Temporary directory: /data/downloads/incomplete"
+      - "Go to Settings > Security"
+      - "Change the default password"
+      - "Enable RPC control for automation apps"
+
+  sabnzbd:
+    name: SABnzbd
+    description: Easy-to-use Usenet download client
+    category: download
+    port: 8081
+    image: lscr.io/linuxserver/sabnzbd:latest
+    volumes:
+      /config: config
+    media_volumes:
+      /data: . # Mount entire media dir as /data
+    env:
+      - PUID
+      - PGID
+      - TZ
+    setup_url: http://localhost:8081
+    setup_steps:
+      - Open SABnzbd in your browser
+      - Complete the quick-start wizard
+      - Add your Usenet server details
+      - "Set Completed Download Folder to: /data/downloads/complete"
+      - "Set Incomplete Download Folder to: /data/downloads/incomplete"
+      - Note your API key from Config > General for use in *arr apps
+
 categories:
   media_server: Media Servers
   arr: "*Arr Suite (Media Management)"

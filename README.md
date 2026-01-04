@@ -67,6 +67,16 @@ Inspired by the [ezarr project](https://github.com/Luctia/ezarr) but written fro
 
   - **Homarr** - Customizable dashboard for all services
   - **FlareSolverr** - Cloudflare bypass proxy for indexers
+  
+### VPN Tunneling
+
+  - **Gluetun** - Lightweight VPN client to tunnel docker containers
+    - Please see [the setup guide](https://github.com/qdm12/gluetun-wiki?tab=readme-ov-file) for usage and modify `./templates/docker-services.yaml` directly before running `setup.py`
+  
+### Usenet
+
+  - **NZBGet** - High-performance usenet download client
+  - **SabNZBd** - Easy to use usenet download client
 
 ## Directory Structure
 

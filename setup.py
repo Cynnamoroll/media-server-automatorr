@@ -659,6 +659,11 @@ class MediaServerSetup:
                 "options": ["prowlarr", "jackett"],
                 "default": 1,  # Prowlarr
             },
+            {
+                "name": "Download Client (Usenet)",
+                "options": ["sabnzbd", "nzbget"],
+                "default": 1,
+            },
         ]
 
         # Track which services we've already handled
@@ -985,6 +990,7 @@ class MediaServerSetup:
 
         # Determine setup order
         order_priority = [
+            "gluetun",
             "qbittorrent",
             "prowlarr",
             "jackett",
