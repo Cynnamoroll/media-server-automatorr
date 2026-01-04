@@ -415,22 +415,31 @@ services:
 
   gluetun:
     name: gluetun
+    cap_add:
+      - NET_ADMIN
     description: VPN client for secure torrenting and Usenet
     category: utility
-    port: 8000
-    image: qdm12/gluetun:latest
+    port: 8888:8888/tcp
+    image: qmcgaw/gluetun:latest
     volumes:
       /gluetun: /gluetun
     extra_volumes:
       /etc/localtime: /etc/localtime:ro
     env:
-      - TZ
       # See https://github.com/qdm12/gluetun-wiki/tree/main/setup#setup
-      - VPNSP=your_provider # e.g., nordvpn, protonvpn
-      - OPENVPN_USER=your_username
-      - OPENVPN_PASSWORD=your_password
-      - FIREWALL=on
-      - FIREWALL_OUTBOUND_SUBNETS=192.168.0.0/16 # Allow local network access
+      - VPN_SERVICE_PROVIDER=ivpn
+      - VPN_TYPE=openvpn
+      # OpenVPN:
+      - OPENVPN_USER=
+      - OPENVPN_PASSWORD=
+      # Wireguard:
+      # - WIREGUARD_PRIVATE_KEY=wOEI9rqqbDwnN8/Bpp22sVz48T71vJ4fYmFWujulwUU=
+      # - WIREGUARD_ADDRESSES=10.64.222.21/32
+      # Timezone for accurate log times
+      - TZ=
+      # Server list updater
+      # See https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#update-the-vpn-servers-list
+      - UPDATER_PERIOD=
     setup_url: null
     setup_steps:
       - Configure environment variables with your VPN credentials
