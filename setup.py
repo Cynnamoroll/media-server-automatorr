@@ -1005,6 +1005,8 @@ class MediaServerSetup:
             "emby",
             "seerr",
             "tautulli",
+            "nzbget",
+            "sabnzbd",
             "homarr",
             "flaresolverr",
         ]
