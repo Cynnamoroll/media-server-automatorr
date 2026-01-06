@@ -349,7 +349,7 @@ services:
       - "Open http://{host_ip}:6767 in your browser"
       - "Connect to Sonarr: Settings → Sonarr (left sidebar)"
       - "Toggle 'Enabled' to ON"
-      - "Address: sonarr (container name, NOT {host_ip} or localhost)"
+      - "Address: sonarr (container name, NOT {host_ip})"
       - "Port: 8989"
       - "API Key: Paste from Sonarr's Settings → General"
       - "Click Test button - verify green success message"

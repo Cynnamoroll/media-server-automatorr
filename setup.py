@@ -562,7 +562,7 @@ class GluetunConfigurator:
                         )
                     elif "ADDRESSES" in field:
                         print(
-                            f"{Colors.DIM}  (Format: x.x.x.x/32, e.g., 10.64.0.1/32){Colors.ENDC}"
+                            f"{Colors.DIM}  (Format: x.x.x.x/32, e.g., 10.64.0.1/32, available in the WireGuard/OpenVPN config file from your provider.){Colors.ENDC}"
                         )
                     elif "PRESHARED_KEY" in field:
                         print(
