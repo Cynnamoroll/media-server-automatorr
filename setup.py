@@ -6,13 +6,15 @@ This script reads all configuration and templates from ./templates
 """
 
 import os
+import re
 import secrets
+import socket
 import string
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 try:
     import yaml
@@ -27,6 +29,133 @@ except ImportError:
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 TEMPLATES_DIR = SCRIPT_DIR / "templates"
+
+
+# ============================================================================
+# VPN PROVIDER DEFINITIONS
+# ============================================================================
+
+VPN_PROVIDERS: Dict[str, Dict[str, Any]] = {
+    "nordvpn": {
+        "name": "NordVPN",
+        "provider_name": "nordvpn",
+        "supports_openvpn": True,
+        "supports_wireguard": True,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": ["WIREGUARD_PRIVATE_KEY"],
+        "credentials_url": "https://my.nordaccount.com/dashboard/nordvpn/manual-configuration/service-credentials/",
+        "credentials_note": "Use your SERVICE CREDENTIALS (not your email/password). Get them from your NordVPN account dashboard.",
+    },
+    "mullvad": {
+        "name": "Mullvad",
+        "provider_name": "mullvad",
+        "supports_openvpn": True,
+        "supports_wireguard": True,
+        "openvpn_fields": ["OPENVPN_USER"],
+        "wireguard_fields": ["WIREGUARD_PRIVATE_KEY", "WIREGUARD_ADDRESSES"],
+        "credentials_url": "https://mullvad.net/en/account/#/wireguard-config",
+        "credentials_note": "For OpenVPN, use your account number. For WireGuard, generate a config file to get your private key and address.",
+    },
+    "protonvpn": {
+        "name": "ProtonVPN",
+        "provider_name": "protonvpn",
+        "supports_openvpn": True,
+        "supports_wireguard": True,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": ["WIREGUARD_PRIVATE_KEY"],
+        "credentials_url": "https://account.proton.me/u/0/vpn/OpenVpnIKEv2",
+        "wireguard_url": "https://account.proton.me/u/0/vpn/WireGuard",
+        "credentials_note": "Use your OpenVPN/IKEv2 credentials (NOT your Proton account password).",
+    },
+    "surfshark": {
+        "name": "Surfshark",
+        "provider_name": "surfshark",
+        "supports_openvpn": True,
+        "supports_wireguard": True,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": ["WIREGUARD_PRIVATE_KEY", "WIREGUARD_ADDRESSES"],
+        "credentials_url": "https://my.surfshark.com/vpn/manual-setup/main",
+        "credentials_note": "Find credentials in: VPN → Manual setup → Credentials (OpenVPN) or generate WireGuard keypair.",
+    },
+    "private internet access": {
+        "name": "Private Internet Access (PIA)",
+        "provider_name": "private internet access",
+        "supports_openvpn": True,
+        "supports_wireguard": False,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": [],
+        "credentials_url": "https://www.privateinternetaccess.com/account/client-control-panel",
+        "credentials_note": "Use your PIA username and password.",
+    },
+    "expressvpn": {
+        "name": "ExpressVPN",
+        "provider_name": "expressvpn",
+        "supports_openvpn": True,
+        "supports_wireguard": False,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": [],
+        "credentials_url": "https://www.expressvpn.com/setup",
+        "credentials_note": "Get your manual configuration credentials from the ExpressVPN setup page.",
+    },
+    "ivpn": {
+        "name": "IVPN",
+        "provider_name": "ivpn",
+        "supports_openvpn": True,
+        "supports_wireguard": True,
+        "openvpn_fields": ["OPENVPN_USER"],
+        "wireguard_fields": ["WIREGUARD_PRIVATE_KEY", "WIREGUARD_ADDRESSES"],
+        "credentials_url": "https://www.ivpn.net/account/",
+        "credentials_note": "For OpenVPN, use your account ID (i-xxxx-xxxx-xxxx). For WireGuard, generate keys in your account.",
+    },
+    "windscribe": {
+        "name": "Windscribe",
+        "provider_name": "windscribe",
+        "supports_openvpn": True,
+        "supports_wireguard": True,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": [
+            "WIREGUARD_PRIVATE_KEY",
+            "WIREGUARD_ADDRESSES",
+            "WIREGUARD_PRESHARED_KEY",
+        ],
+        "credentials_url": "https://fra.windscribe.com/getconfig/openvpn",
+        "wireguard_url": "https://fra.windscribe.com/getconfig/wireguard",
+        "credentials_note": "Generate config files from Windscribe to get your credentials.",
+    },
+    "cyberghost": {
+        "name": "CyberGhost",
+        "provider_name": "cyberghost",
+        "supports_openvpn": True,
+        "supports_wireguard": False,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": [],
+        "credentials_url": "https://my.cyberghostvpn.com/",
+        "credentials_note": "Get your manual configuration credentials from your CyberGhost account.",
+    },
+    "torguard": {
+        "name": "TorGuard",
+        "provider_name": "torguard",
+        "supports_openvpn": True,
+        "supports_wireguard": True,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": ["WIREGUARD_PRIVATE_KEY", "WIREGUARD_ADDRESSES"],
+        "credentials_url": "https://torguard.net/clientarea.php",
+        "credentials_note": "Use your TorGuard VPN credentials.",
+    },
+    "vyprvpn": {
+        "name": "VyprVPN",
+        "provider_name": "vyprvpn",
+        "supports_openvpn": True,
+        "supports_wireguard": False,
+        "openvpn_fields": ["OPENVPN_USER", "OPENVPN_PASSWORD"],
+        "wireguard_fields": [],
+        "credentials_url": "https://www.vyprvpn.com/",
+        "credentials_note": "Use your VyprVPN account email and password.",
+    },
+}
+
+# Fields that are optional (can be empty)
+OPTIONAL_CREDENTIAL_FIELDS = {"OPENVPN_PASSWORD", "WIREGUARD_PRESHARED_KEY"}
 
 
 # ============================================================================
@@ -98,6 +227,7 @@ class Colors:
     RED = "\033[91m"
     ENDC = "\033[0m"
     BOLD = "\033[1m"
+    DIM = "\033[2m"
 
 
 def print_header(text: str) -> None:
@@ -124,12 +254,28 @@ def print_info(text: str) -> None:
     print(f"{Colors.BLUE}[INFO] {text}{Colors.ENDC}")
 
 
+def print_link(text: str, url: str) -> None:
+    """Print a clickable link (terminals that support it will make it clickable)."""
+    print(f"{Colors.CYAN}  → {text}: {Colors.ENDC}{url}")
+
+
 def prompt(message: str, default: str = "") -> str:
     """Prompt user for input with optional default."""
     if default:
         user_input = input(f"{Colors.BOLD}{message}{Colors.ENDC} [{default}]: ").strip()
         return user_input if user_input else default
     return input(f"{Colors.BOLD}{message}{Colors.ENDC}: ").strip()
+
+
+def prompt_secret(message: str) -> str:
+    """Prompt user for sensitive input (passwords, keys)."""
+    import getpass
+
+    try:
+        return getpass.getpass(f"{Colors.BOLD}{message}{Colors.ENDC}: ")
+    except Exception:
+        # Fallback if getpass doesn't work (e.g., some IDEs)
+        return input(f"{Colors.BOLD}{message}{Colors.ENDC}: ").strip()
 
 
 def prompt_yes_no(message: str, default: bool = True) -> bool:
@@ -188,6 +334,308 @@ def get_timezone() -> str:
         return "UTC"
 
 
+def get_local_network_ip() -> str:
+    """Get the device's IP address on the local network."""
+    # Method 1: Try using ip command (most reliable on Linux)
+    try:
+        result = subprocess.run(
+            ["ip", "route", "get", "1"], capture_output=True, text=True, check=True
+        )
+        parts = result.stdout.split("src ")
+        if len(parts) > 1:
+            ip = parts[1].split()[0]
+            if ip and not ip.startswith("127."):
+                return ip
+    except (subprocess.CalledProcessError, FileNotFoundError, IndexError):
+        pass
+
+    # Method 2: Try hostname -I
+    try:
+        result = subprocess.run(
+            ["hostname", "-I"], capture_output=True, text=True, check=True
+        )
+        ips = result.stdout.strip().split()
+        for ip in ips:
+            if ip and not ip.startswith("127.") and ":" not in ip:
+                return ip
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    # Method 3: Try ifconfig (fallback for older systems)
+    try:
+        result = subprocess.run(
+            ["ifconfig"], capture_output=True, text=True, check=True
+        )
+        matches = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", result.stdout)
+        for ip in matches:
+            if not ip.startswith("127."):
+                return ip
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    # Method 4: Python socket method (last resort)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+
+    return "localhost"
+
+
+def replace_placeholders(text: str, replacements: Dict[str, str]) -> str:
+    """Replace placeholders in text with values from replacements dict."""
+    result = text
+    for key, value in replacements.items():
+        result = result.replace(f"{{{key}}}", value)
+    return result
+
+
+# ============================================================================
+# GLUETUN CONFIGURATOR
+# ============================================================================
+
+
+class GluetunConfigurator:
+    """Handles interactive Gluetun VPN configuration."""
+
+    def __init__(self):
+        self.enabled: bool = False
+        self.provider: Optional[str] = None
+        self.vpn_type: str = "openvpn"
+        self.credentials: Dict[str, str] = {}
+        self.server_countries: str = ""
+        self.route_qbittorrent: bool = False
+
+    def configure(self) -> bool:
+        """Run interactive Gluetun configuration. Returns True if configured."""
+        print_header("VPN CONFIGURATION (GLUETUN)")
+
+        print("Gluetun routes your download traffic through a VPN for privacy.")
+        print("This is optional but recommended for torrent downloads.\n")
+
+        if not prompt_yes_no("Would you like to configure a VPN?", default=False):
+            print_info("Skipping VPN configuration.")
+            self.enabled = False
+            return False
+
+        self.enabled = True
+
+        # Select provider
+        self._select_provider()
+
+        # Select VPN type (skip for custom)
+        if self.provider != "custom":
+            self._select_vpn_type()
+
+        # Collect credentials (skip for custom)
+        if self.provider != "custom":
+            self._collect_credentials()
+
+        # Optional: Server location (skip for custom)
+        if self.provider != "custom":
+            self._configure_server_location()
+
+        # Route qBittorrent through VPN
+        self._configure_qbittorrent_routing()
+
+        print_success("VPN configuration complete!")
+        return True
+
+    def _select_provider(self) -> None:
+        """Let user select their VPN provider."""
+        print(f"\n{Colors.BOLD}Select your VPN provider:{Colors.ENDC}\n")
+
+        providers = list(VPN_PROVIDERS.items())
+        for i, (key, provider) in enumerate(providers, 1):
+            print(f"  {i:2}. {provider['name']}")
+
+        print(f"  {len(providers) + 1:2}. Other (manual configuration)")
+
+        while True:
+            choice = prompt("\nEnter your choice", "1")
+            try:
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(providers):
+                    self.provider = providers[choice_num - 1][0]
+                    provider_info = VPN_PROVIDERS[self.provider]
+                    print_success(f"Selected: {provider_info['name']}")
+                    return
+                elif choice_num == len(providers) + 1:
+                    print_warning("Manual configuration selected.")
+                    print_info(
+                        "You'll need to edit docker-compose.yml manually after setup."
+                    )
+                    print_link(
+                        "Gluetun Wiki",
+                        "https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers",
+                    )
+                    self.provider = "custom"
+                    return
+                else:
+                    print_error(f"Please enter 1-{len(providers) + 1}")
+            except ValueError:
+                print_error("Please enter a valid number")
+
+    def _select_vpn_type(self) -> None:
+        """Let user select OpenVPN or WireGuard."""
+        if self.provider is None or self.provider == "custom":
+            self.vpn_type = "openvpn"
+            return
+
+        provider_info = VPN_PROVIDERS[self.provider]
+
+        if provider_info["supports_openvpn"] and provider_info["supports_wireguard"]:
+            print(f"\n{Colors.BOLD}Select VPN protocol:{Colors.ENDC}\n")
+            print("  1. OpenVPN (wider compatibility, slightly slower)")
+            print("  2. WireGuard (faster, modern, recommended)")
+
+            while True:
+                choice = prompt("\nEnter your choice", "2")
+                if choice == "1":
+                    self.vpn_type = "openvpn"
+                    print_success("Selected: OpenVPN")
+                    return
+                elif choice == "2":
+                    self.vpn_type = "wireguard"
+                    print_success("Selected: WireGuard")
+                    return
+                else:
+                    print_error("Please enter 1 or 2")
+        elif provider_info["supports_wireguard"]:
+            self.vpn_type = "wireguard"
+            print_info(f"{provider_info['name']} uses WireGuard.")
+        else:
+            self.vpn_type = "openvpn"
+            print_info(f"{provider_info['name']} uses OpenVPN.")
+
+    def _collect_credentials(self) -> None:
+        """Collect VPN credentials from user."""
+        if self.provider is None or self.provider == "custom":
+            print_info(
+                "Configure your VPN credentials in docker-compose.yml after setup."
+            )
+            return
+
+        provider_info = VPN_PROVIDERS[self.provider]
+
+        print(f"\n{Colors.BOLD}Enter your VPN credentials:{Colors.ENDC}\n")
+
+        # Show helpful information
+        print(
+            f"{Colors.YELLOW}Note: {provider_info['credentials_note']}{Colors.ENDC}\n"
+        )
+
+        # Show relevant URL
+        if self.vpn_type == "wireguard" and provider_info.get("wireguard_url"):
+            print_link("Get your credentials here", provider_info["wireguard_url"])
+        else:
+            print_link("Get your credentials here", provider_info["credentials_url"])
+        print()
+
+        # Determine which fields to collect
+        if self.vpn_type == "openvpn":
+            fields = provider_info["openvpn_fields"]
+        else:
+            fields = provider_info["wireguard_fields"]
+
+        # Collect each field
+        for field in fields:
+            field_display = field.replace("_", " ").title()
+            is_optional = field in OPTIONAL_CREDENTIAL_FIELDS
+
+            # Determine if this is a sensitive field
+            is_sensitive = any(
+                word in field.lower() for word in ["password", "key", "secret"]
+            )
+
+            while True:
+                if is_sensitive:
+                    # Show guidance for specific fields
+                    if "PRIVATE_KEY" in field:
+                        print(
+                            f"{Colors.DIM}  (Base64 encoded, ~44 characters){Colors.ENDC}"
+                        )
+                    elif "ADDRESSES" in field:
+                        print(
+                            f"{Colors.DIM}  (Format: x.x.x.x/32, e.g., 10.64.0.1/32){Colors.ENDC}"
+                        )
+                    elif "PRESHARED_KEY" in field:
+                        print(
+                            f"{Colors.DIM}  (Base64 encoded preshared key, optional){Colors.ENDC}"
+                        )
+
+                    value = prompt_secret(f"  {field_display}")
+                else:
+                    value = prompt(f"  {field_display}")
+
+                # Validate required fields
+                if not value and not is_optional:
+                    print_error(f"{field_display} is required.")
+                    continue
+
+                self.credentials[field] = value
+                break
+
+    def _configure_server_location(self) -> None:
+        """Optionally configure server location."""
+        print(f"\n{Colors.BOLD}Server Location (Optional){Colors.ENDC}\n")
+        print("You can specify which country/region to connect to.")
+        print("Leave blank to use the provider's default/fastest server.\n")
+
+        countries = prompt(
+            "Server countries (comma-separated, e.g., 'Netherlands,Germany')", ""
+        )
+        self.server_countries = countries.strip()
+
+        if self.server_countries:
+            print_success(f"Will connect to: {self.server_countries}")
+        else:
+            print_info("Using provider's default server selection")
+
+    def _configure_qbittorrent_routing(self) -> None:
+        """Ask if qBittorrent should be routed through VPN."""
+        print(f"\n{Colors.BOLD}Route qBittorrent through VPN?{Colors.ENDC}\n")
+        print("This ensures all torrent traffic goes through the VPN.")
+        print("Highly recommended for privacy when torrenting.\n")
+
+        self.route_qbittorrent = prompt_yes_no(
+            "Route qBittorrent through Gluetun VPN?", default=True
+        )
+
+        if self.route_qbittorrent:
+            print_success("qBittorrent will use VPN for all traffic")
+            print_info("qBittorrent's web UI will be accessible via Gluetun's ports")
+        else:
+            print_info("qBittorrent will use direct connection")
+
+    def get_environment_vars(self) -> Dict[str, str]:
+        """Get environment variables for docker-compose."""
+        if not self.enabled or self.provider is None or self.provider == "custom":
+            return {}
+
+        provider_info = VPN_PROVIDERS[self.provider]
+        env: Dict[str, str] = {
+            "VPN_SERVICE_PROVIDER": provider_info["provider_name"],
+            "VPN_TYPE": self.vpn_type,
+        }
+
+        # Add credentials (only non-empty values)
+        for key, value in self.credentials.items():
+            if value:  # Only add non-empty credentials
+                env[key] = value
+
+        # Add server location if specified
+        if self.server_countries:
+            env["SERVER_COUNTRIES"] = self.server_countries
+
+        return env
+
+
 # ============================================================================
 # GUIDE GENERATOR
 # ============================================================================
@@ -209,6 +657,8 @@ class GuideGenerator:
         media_dir: Path,
         output_dir: Path,
         timezone: str,
+        host_ip: str = "localhost",
+        qbittorrent_host: str = "qbittorrent",
     ) -> str:
         """Generate the complete setup guide."""
         services = self.loader.get_services()
@@ -217,7 +667,10 @@ class GuideGenerator:
         service_table_lines = []
         for service_id in selected_services:
             svc = services[service_id]
-            url = svc.get("setup_url") or "(no web UI)"
+            if svc.get("setup_url"):
+                url = replace_placeholders(svc["setup_url"], {"host_ip": host_ip})
+            else:
+                url = "(no web UI)"
             port = svc["port"]
             service_table_lines.append(f"| {svc['name']} | {url} | {port} |")
         service_table_lines.append("| Watchtower | (auto-updates containers) | - |")
@@ -248,7 +701,7 @@ class GuideGenerator:
         service_sections = []
         for service_id in selected_services:
             svc = services[service_id]
-            section = self._build_service_section(svc)
+            section = self._build_service_section(svc, host_ip, qbittorrent_host)
             service_sections.append(section)
 
         # Render footer
@@ -262,7 +715,12 @@ class GuideGenerator:
         # Combine all parts
         return header + "\n".join(service_sections) + "\n" + footer
 
-    def _build_service_section(self, service: Dict[str, Any]) -> str:
+    def _build_service_section(
+        self,
+        service: Dict[str, Any],
+        host_ip: str = "localhost",
+        qbittorrent_host: str = "qbittorrent",
+    ) -> str:
         """Build markdown section for a single service."""
         lines = [
             f"### {service['name']}",
@@ -271,15 +729,24 @@ class GuideGenerator:
             "",
         ]
 
+        # Prepare replacements
+        replacements = {
+            "host_ip": host_ip,
+            "qbittorrent_host": qbittorrent_host,
+        }
+
         if service.get("setup_url"):
-            lines.append(f"**URL:** {service['setup_url']}")
+            url = replace_placeholders(service["setup_url"], replacements)
+            lines.append(f"**URL:** {url}")
             lines.append("")
 
         lines.append("**Setup Steps:**")
         lines.append("")
 
         for i, step in enumerate(service.get("setup_steps", []), 1):
-            lines.append(f"{i}. {step}")
+            # Replace placeholders in each step
+            step_text = replace_placeholders(step, replacements)
+            lines.append(f"{i}. {step_text}")
 
         lines.extend(["", "---", ""])
 
@@ -306,14 +773,49 @@ class ComposeGenerator:
         media_dir: Path,
         timezone: str,
         encryption_key: str = "",
+        gluetun_config: Optional[GluetunConfigurator] = None,
     ) -> str:
         """Generate docker-compose.yml content."""
         services = self.loader.get_services()
 
         lines = ["---", "services:", ""]
 
+        # Determine if qBittorrent should be routed through Gluetun
+        route_qbit_through_vpn = (
+            gluetun_config is not None
+            and gluetun_config.enabled
+            and gluetun_config.route_qbittorrent
+            and "qbittorrent" in selected_services
+        )
+
+        # Build Gluetun first if enabled (other services may depend on it)
+        if (
+            gluetun_config is not None
+            and gluetun_config.enabled
+            and "gluetun" in selected_services
+        ):
+            lines.extend(
+                self._build_gluetun_block(
+                    services["gluetun"],
+                    uid,
+                    gid,
+                    docker_dir,
+                    timezone,
+                    gluetun_config,
+                    route_qbit_through_vpn,
+                    services.get("qbittorrent", {}),
+                )
+            )
+
         for service_id in selected_services:
+            if service_id == "gluetun":
+                continue  # Already handled above
+
             svc = services[service_id]
+
+            # Check if this service should use Gluetun's network
+            use_gluetun_network = service_id == "qbittorrent" and route_qbit_through_vpn
+
             lines.extend(
                 self._build_service_block(
                     service_id,
@@ -324,6 +826,7 @@ class ComposeGenerator:
                     media_dir,
                     timezone,
                     encryption_key,
+                    use_gluetun_network,
                 )
             )
 
@@ -335,6 +838,73 @@ class ComposeGenerator:
 
         return "\n".join(lines)
 
+    def _build_gluetun_block(
+        self,
+        svc: Dict[str, Any],
+        uid: int,
+        gid: int,
+        docker_dir: Path,
+        timezone: str,
+        gluetun_config: GluetunConfigurator,
+        route_qbittorrent: bool,
+        qbittorrent_svc: Dict[str, Any],
+    ) -> List[str]:
+        """Build Gluetun service block with proper configuration."""
+        lines = [
+            "  gluetun:",
+            f"    image: {svc['image']}",
+            "    container_name: gluetun",
+            "    restart: unless-stopped",
+            "    cap_add:",
+            "      - NET_ADMIN",
+            "    devices:",
+            "      - /dev/net/tun:/dev/net/tun",
+        ]
+
+        # Environment variables
+        lines.append("    environment:")
+        lines.append(f"      - TZ={timezone}")
+
+        # Add VPN configuration from gluetun_config
+        env_vars = gluetun_config.get_environment_vars()
+        for key, value in env_vars.items():
+            lines.append(f"      - {key}={value}")
+
+        # Volumes - use the svc definition properly
+        lines.append("    volumes:")
+        for container_path, vol_name in svc.get("volumes", {}).items():
+            host_path = docker_dir / "gluetun" / vol_name
+            lines.append(f"      - {host_path}:{container_path}")
+
+        # Ports
+        lines.append("    ports:")
+        # Main port from YAML
+        main_port = svc.get("port", 8888)
+        lines.append(f"      - '{main_port}:{main_port}/tcp'  # HTTP proxy")
+
+        # Extra ports from YAML
+        for extra_port in svc.get("extra_ports", []):
+            if isinstance(extra_port, dict):
+                for port, comment in extra_port.items():
+                    lines.append(f"      - '{port}'  # {comment}")
+            else:
+                lines.append(f"      - '{extra_port}:{extra_port}/tcp'")
+                lines.append(f"      - '{extra_port}:{extra_port}/udp'")
+
+        if route_qbittorrent:
+            # Add qBittorrent's ports to Gluetun
+            qbit_port = qbittorrent_svc.get("port", 8080)
+            lines.append(f"      - '{qbit_port}:{qbit_port}'  # qBittorrent Web UI")
+            for extra_port in qbittorrent_svc.get("extra_ports", []):
+                lines.append(f"      - '{extra_port}:{extra_port}'  # qBittorrent")
+                lines.append(f"      - '{extra_port}:{extra_port}/udp'")
+
+        lines.append("    networks:")
+        lines.append("      - media-network")
+        lines.append("")
+
+        return lines
+
     def _build_service_block(
         self,
         service_id: str,
@@ -345,6 +915,7 @@ class ComposeGenerator:
         media_dir: Path,
         timezone: str,
         encryption_key: str,
+        use_gluetun_network: bool = False,
     ) -> List[str]:
         """Build docker-compose block for a single service."""
         lines = [
@@ -353,6 +924,12 @@ class ComposeGenerator:
             f"    container_name: {service_id}",
             "    restart: unless-stopped",
         ]
+
+        # If using Gluetun network, add network_mode instead of ports/networks
+        if use_gluetun_network:
+            lines.append('    network_mode: "service:gluetun"')
+            lines.append("    depends_on:")
+            lines.append("      - gluetun")
 
         # Environment
         env_lines = []
@@ -389,17 +966,19 @@ class ComposeGenerator:
             lines.append("    volumes:")
             lines.extend(volume_lines)
 
-        # Ports
-        port_lines = [f"      - '{svc['port']}:{svc['port']}'"]
-        for extra_port in svc.get("extra_ports", []):
-            port_lines.append(f"      - '{extra_port}:{extra_port}'")
-            port_lines.append(f"      - '{extra_port}:{extra_port}/udp'")
+        # Ports and networks (skip if using Gluetun network)
+        if not use_gluetun_network:
+            port_lines = [f"      - '{svc['port']}:{svc['port']}'"]
+            for extra_port in svc.get("extra_ports", []):
+                port_lines.append(f"      - '{extra_port}:{extra_port}'")
+                port_lines.append(f"      - '{extra_port}:{extra_port}/udp'")
 
-        lines.append("    ports:")
-        lines.extend(port_lines)
+            lines.append("    ports:")
+            lines.extend(port_lines)
 
-        lines.append("    networks:")
-        lines.append("      - media-network")
+            lines.append("    networks:")
+            lines.append("      - media-network")
+
         lines.append("")
 
         return lines
@@ -444,16 +1023,21 @@ class MediaServerSetup:
         self.timezone: str = get_timezone()
         self.encryption_key: str = ""
         self.output_dir: Path = Path.cwd() / "output"
+        self.host_ip: str = "localhost"
+        self.is_remote_access: bool = False
+        self.gluetun_config: GluetunConfigurator = GluetunConfigurator()
 
     def run(self) -> None:
         """Run the complete setup process."""
         try:
             self._validate_templates()
             self._print_welcome()
+            self._detect_access_mode()
             self._check_prerequisites()
             self._setup_user()
             self._setup_directories()
             self._select_services()
+            self._configure_vpn()
             self._generate_files()
             self._setup_permissions()
             self._offer_walkthrough()
@@ -488,6 +1072,7 @@ class MediaServerSetup:
         print("  - Media servers (Jellyfin, Plex)")
         print("  - *Arr suite for media management")
         print("  - Download clients and indexers")
+        print("  - VPN support for private downloads")
         print("  - Companion apps and dashboards\n")
         print(
             f"{Colors.YELLOW}Note: This script requires sudo privileges.{Colors.ENDC}\n"
@@ -496,6 +1081,43 @@ class MediaServerSetup:
         if not prompt_yes_no("Ready to begin?"):
             print("Setup cancelled.")
             sys.exit(0)
+
+    def _detect_access_mode(self) -> None:
+        """Detect whether user is accessing locally or remotely and set appropriate IP."""
+        print_header("ACCESS MODE")
+
+        print("How are you accessing this device?\n")
+        print("  1. Local (monitor/display attached)")
+        print("  2. Remote (SSH, VNC, or similar)\n")
+
+        while True:
+            choice = prompt("Select access mode (1/2)", "1")
+            if choice in ("1", "2"):
+                break
+            print_error("Please enter 1 or 2")
+
+        if choice == "1":
+            # Local access - use localhost
+            self.is_remote_access = False
+            self.host_ip = "localhost"
+            print_success("Using localhost for service URLs")
+            print_info("Services will be accessible at: http://localhost:<port>")
+        else:
+            # Remote access - detect network IP
+            self.is_remote_access = True
+            print_info("Detecting network IP address...")
+
+            self.host_ip = get_local_network_ip()
+
+            if self.host_ip == "localhost":
+                print_warning("Could not auto-detect network IP.")
+                self.host_ip = prompt("Enter this device's IP address on your network")
+            else:
+                print_success(f"Detected IP: {self.host_ip}")
+                if not prompt_yes_no(f"Use {self.host_ip}?"):
+                    self.host_ip = prompt("Enter the correct IP address")
+
+            print_info(f"Services will be accessible at: http://{self.host_ip}:<port>")
 
     def _check_prerequisites(self) -> None:
         """Check that required software is installed."""
@@ -652,12 +1274,12 @@ class MediaServerSetup:
             {
                 "name": "Media Server",
                 "options": ["jellyfin", "plex", "emby"],
-                "default": 1,  # Jellyfin
+                "default": 1,
             },
             {
                 "name": "Indexer Manager",
                 "options": ["prowlarr", "jackett"],
-                "default": 1,  # Prowlarr
+                "default": 1,
             },
             {
                 "name": "Download Client (Usenet)",
@@ -707,15 +1329,13 @@ class MediaServerSetup:
                 except ValueError:
                     print_error("Please enter a valid number")
 
-            # Mark all options in this group as handled
             handled_services.update(group["options"])
 
         # Handle remaining services by category
-        # Group remaining services by category
         categorized: Dict[str, List[tuple]] = {}
         for service_id, svc in services.items():
             if service_id in handled_services:
-                continue  # Skip already-handled exclusive services
+                continue
             cat = svc["category"]
             if cat not in categorized:
                 categorized[cat] = []
@@ -728,6 +1348,10 @@ class MediaServerSetup:
             print(f"\n{Colors.BOLD}=== {cat_name} ==={Colors.ENDC}")
 
             for service_id, svc in categorized[cat_id]:
+                # Skip gluetun here - we'll handle it in VPN configuration
+                if service_id == "gluetun":
+                    continue
+
                 is_default = service_id in defaults
                 if prompt_yes_no(
                     f"  {svc['name']} (port {svc['port']}) - {svc['description']}?",
@@ -743,6 +1367,24 @@ class MediaServerSetup:
         print(f"\n{Colors.GREEN}Selected services:{Colors.ENDC}")
         for service_id in self.selected_services:
             print(f"  - {services[service_id]['name']}")
+
+    def _configure_vpn(self) -> None:
+        """Configure VPN if user wants it."""
+        # Only offer VPN if qBittorrent is selected
+        if "qbittorrent" not in self.selected_services:
+            print_info("VPN configuration skipped (no torrent client selected)")
+            return
+
+        if self.gluetun_config.configure():
+            # Add gluetun to selected services
+            self.selected_services.insert(0, "gluetun")
+
+    def _get_qbittorrent_host(self) -> str:
+        """Get the hostname to use for qBittorrent connections from other containers."""
+        if self.gluetun_config.enabled and self.gluetun_config.route_qbittorrent:
+            # When qBittorrent uses gluetun's network, other containers must connect via gluetun
+            return "gluetun"
+        return "qbittorrent"
 
     def _generate_files(self) -> None:
         """Generate all configuration files."""
@@ -772,6 +1414,7 @@ class MediaServerSetup:
             self.media_dir,
             self.timezone,
             self.encryption_key,
+            self.gluetun_config if self.gluetun_config.enabled else None,
         )
         compose_path = self.output_dir / "docker-compose.yml"
         compose_path.parent.mkdir(parents=True, exist_ok=True)
@@ -789,6 +1432,7 @@ class MediaServerSetup:
             f"TZ={self.timezone}",
             f"DOCKER_DIR={self.docker_dir}",
             f"MEDIA_DIR={self.media_dir}",
+            f"HOST_IP={self.host_ip}",
         ]
         if self.encryption_key:
             env_lines.append(f"SECRET_ENCRYPTION_KEY={self.encryption_key}")
@@ -800,6 +1444,7 @@ class MediaServerSetup:
         print_success(f"Created {env_path}")
 
         # Generate setup guide
+        qbittorrent_host = self._get_qbittorrent_host()
         guide_content = self.guide_gen.generate(
             self.selected_services,
             self.username,
@@ -809,6 +1454,8 @@ class MediaServerSetup:
             self.media_dir,
             self.output_dir,
             self.timezone,
+            self.host_ip,
+            qbittorrent_host,
         )
         guide_path = self.output_dir / "SETUP_GUIDE.md"
         guide_path.write_text(guide_content, encoding="utf-8")
@@ -859,23 +1506,18 @@ class MediaServerSetup:
 
         services = self.loader.get_services()
 
-        # Build list of images to track
-        images_to_pull: Dict[str, str] = {}  # image -> service name
+        images_to_pull: Dict[str, str] = {}
         for service_id in self.selected_services:
             svc = services[service_id]
             images_to_pull[svc["image"]] = svc["name"]
 
-        # Add Watchtower
         images_to_pull["containrrr/watchtower:latest"] = "Watchtower"
 
-        # Track status for each image
         image_status: Dict[str, str] = {img: "Waiting" for img in images_to_pull}
 
         def print_progress() -> None:
-            """Print current status of all images."""
-            # Move cursor up and clear lines (ANSI escape codes)
-            lines = len(images_to_pull) + 2
-            print(f"\033[{lines}A", end="")  # Move up
+            lines_count = len(images_to_pull) + 2
+            print(f"\033[{lines_count}A", end="")
 
             print(
                 f"{Colors.BOLD}{'Service':<20} {'Image':<45} {'Status':<15}{Colors.ENDC}"
@@ -885,7 +1527,6 @@ class MediaServerSetup:
             for image, name in images_to_pull.items():
                 status = image_status.get(image, "Waiting")
 
-                # Color-code status
                 if status == "Done":
                     status_display = f"{Colors.GREEN}✓ Done{Colors.ENDC}"
                 elif status == "Pulling":
@@ -897,15 +1538,12 @@ class MediaServerSetup:
                 else:
                     status_display = f"{Colors.YELLOW}○ Waiting{Colors.ENDC}"
 
-                # Truncate image name if too long
                 image_short = image[:43] + ".." if len(image) > 45 else image
                 print(f"{name:<20} {image_short:<45} {status_display:<15}")
 
-        # Print initial status
-        print("\n" * (len(images_to_pull) + 2))  # Make room
+        print("\n" * (len(images_to_pull) + 2))
         print_progress()
 
-        # Run docker compose pull and parse output
         try:
             os.chdir(self.output_dir)
 
@@ -921,12 +1559,8 @@ class MediaServerSetup:
                 for line in process.stdout:
                     line = line.strip()
 
-                    # Parse Docker Compose pull output
-                    # Format: " Container image Pulling" or " Container image Pulled"
                     for image in images_to_pull:
-                        image_short = image.split("/")[
-                            -1
-                        ]  # Get just the image:tag part
+                        image_short = image.split("/")[-1]
 
                         if image_short in line or image in line:
                             if "Pulling" in line:
@@ -945,7 +1579,6 @@ class MediaServerSetup:
 
             process.wait()
 
-            # Mark any remaining as done (already existed)
             for image in images_to_pull:
                 if image_status[image] == "Waiting":
                     image_status[image] = "Exists"
@@ -961,7 +1594,6 @@ class MediaServerSetup:
             print_error(f"Failed to pull images: {e}")
             return
 
-        # Start containers
         print_info("Starting containers...")
         try:
             result = run_command(["docker", "compose", "up", "-d"], check=False)
@@ -987,8 +1619,9 @@ class MediaServerSetup:
             return
 
         services = self.loader.get_services()
+        qbittorrent_host = self._get_qbittorrent_host()
+        replacements = {"host_ip": self.host_ip, "qbittorrent_host": qbittorrent_host}
 
-        # Determine setup order
         order_priority = [
             "gluetun",
             "qbittorrent",
@@ -1026,13 +1659,15 @@ class MediaServerSetup:
             print("=" * 60)
 
             if svc.get("setup_url"):
-                print(f"\n{Colors.GREEN}Open: {svc['setup_url']}{Colors.ENDC}\n")
+                url = replace_placeholders(svc["setup_url"], replacements)
+                print(f"\n{Colors.GREEN}Open: {url}{Colors.ENDC}\n")
             else:
                 print(f"\n{Colors.YELLOW}(No web interface){Colors.ENDC}\n")
 
             print(f"{Colors.BOLD}Setup Steps:{Colors.ENDC}\n")
             for j, step in enumerate(svc.get("setup_steps", []), 1):
-                print(f"  {j}. {step}")
+                step_text = replace_placeholders(step, replacements)
+                print(f"  {j}. {step_text}")
 
             wait_for_done(i, total)
 
@@ -1043,6 +1678,10 @@ class MediaServerSetup:
         print_header("CONGRATULATIONS!")
 
         services = self.loader.get_services()
+        replacements = {
+            "host_ip": self.host_ip,
+            "qbittorrent_host": self._get_qbittorrent_host(),
+        }
 
         print(f"{Colors.GREEN}Your media server has been set up!{Colors.ENDC}\n")
 
@@ -1050,7 +1689,17 @@ class MediaServerSetup:
         for service_id in self.selected_services:
             svc = services[service_id]
             if svc.get("setup_url"):
-                print(f"  - {svc['name']}: {svc['setup_url']}")
+                url = replace_placeholders(svc["setup_url"], replacements)
+                print(f"  - {svc['name']}: {url}")
+
+        if self.gluetun_config.enabled and self.gluetun_config.route_qbittorrent:
+            print(
+                f"\n{Colors.YELLOW}Note: qBittorrent traffic is routed through VPN{Colors.ENDC}"
+            )
+            print("  Verify VPN is working: docker exec gluetun wget -qO- ifconfig.me")
+            print(
+                f"  *arr apps should use 'gluetun' as the qBittorrent host (not 'qbittorrent')"
+            )
 
         print(f"\n{Colors.BOLD}Files Created:{Colors.ENDC}")
         print(f"  - Docker Compose: {self.output_dir / 'docker-compose.yml'}")

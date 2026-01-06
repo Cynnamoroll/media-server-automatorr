@@ -1,7 +1,32 @@
 # Service Definitions
 # All setup instructions are stored here
+# {host_ip} placeholders are replaced at runtime with the user's configured IP
 
 services:
+  gluetun:
+    name: Gluetun
+    description: VPN client container for secure downloads
+    category: utility
+    port: 8888
+    extra_ports: [8388]
+    image: qmcgaw/gluetun:latest
+    volumes:
+      /gluetun: config
+    env:
+      - TZ
+    setup_url: null
+    setup_steps:
+      - "Gluetun was configured during setup and should connect automatically"
+      - "Verify VPN connection: docker exec gluetun wget -qO- ifconfig.me"
+      - "The IP shown should be your VPN provider's IP, not your home IP"
+      - "Check Gluetun logs for connection status: docker logs gluetun"
+      - "If connection fails, verify your credentials in docker-compose.yml"
+      - "Common issues:"
+      - "  - Wrong credentials: Double-check username/password or WireGuard keys"
+      - "  - Server unavailable: Try a different SERVER_COUNTRIES value"
+      - "  - Firewall blocking: Ensure UDP port 1194 (OpenVPN) or 51820 (WireGuard) is open"
+      - "Gluetun Wiki: https://github.com/qdm12/gluetun-wiki"
+
   jellyfin:
     name: Jellyfin
     description: Free and open-source media server
@@ -17,18 +42,20 @@ services:
       /data/music: music
     env:
       - TZ
-    setup_url: http://localhost:8096
+    setup_url: http://{host_ip}:8096
     setup_steps:
-      - Open Jellyfin in your browser
-      - Select your preferred language and click Next
-      - Create an admin username and password
-      - "Add media libraries by clicking 'Add Media Library':"
-      - "  - Select content type (Movies, Shows, Music, etc.)"
-      - "  - Add the appropriate folder path from /data/"
-      - Configure metadata language and country preferences
-      - Configure remote access settings based on your needs
-      - Complete the setup wizard
-      - "(Optional) Configure hardware transcoding in Dashboard > Playback > Transcoding based on your hardware"
+      - "Open http://{host_ip}:8096 in your browser"
+      - "Select your preferred display language and click Next"
+      - "Create your admin account with a username and strong password, then click Next"
+      - "Click the large '+' button to add a media library"
+      - "Select Content type (Movies, Shows, or Music) from the dropdown"
+      - "Click the '+' next to Folders and select /data/movies, /data/tv, or /data/music"
+      - "Keep the default metadata settings (TheMovieDb for movies/shows) and click OK"
+      - "Repeat to add libraries for each media type you want"
+      - "On the Preferred Metadata Language screen, select your language and click Next"
+      - "On Remote Access: Enable 'Allow remote connections to this server', disable 'Enable automatic port mapping', click Next"
+      - "Click Finish to complete the wizard"
+      - "(Optional) For hardware transcoding: Dashboard → Playback → Transcoding → Select your GPU type"
 
   plex:
     name: Plex
@@ -48,18 +75,19 @@ services:
       - PGID
       - TZ
       - VERSION=docker
-    setup_url: http://localhost:32400/web
+    setup_url: http://{host_ip}:32400/web
     setup_steps:
-      - Open Plex in your browser
-      - Sign in or create a Plex account
-      - Give your server a name
-      - "Add media libraries:"
-      - "  - Click 'Add Library'"
-      - "  - Select library type (Movies, TV Shows, Music, etc.)"
-      - "  - Browse to the appropriate /movies, /tv, or /music folder"
-      - Configure library settings (scanner, agent, language)
-      - Complete the setup wizard
-      - "(Optional) Configure hardware transcoding in Settings > Transcoder based on your hardware"
+      - "Open http://{host_ip}:32400/web in your browser"
+      - "Sign in with your Plex account (create one free at plex.tv if needed)"
+      - "Check 'I understand' and click Got It on the Plex Pass screen"
+      - "Name your server (this appears in Plex apps on all devices) and click Next"
+      - "Click 'Add Library' to add your media"
+      - "Select library type (Movies, TV Shows, Music, etc.)"
+      - "Click 'Browse for media folder' and select /movies, /tv, or /music"
+      - "Click Add Library, then repeat for other media types"
+      - "Click Next, then Done to finish setup"
+      - "Verify remote access: Settings (wrench icon) → Remote Access → Check for green checkmark"
+      - "(Optional) Enable hardware transcoding: Settings → Transcoder → 'Use hardware acceleration when available'"
 
   emby:
     name: Emby
@@ -77,15 +105,21 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:8096
+    setup_url: http://{host_ip}:8096
     setup_steps:
-      - Open Emby in your browser
-      - Complete the initial setup wizard
-      - Create your admin account
-      - Add media libraries (TV Shows, Movies, Music)
-      - Point each library to the appropriate /data folder
-      - Configure remote access settings if needed
-      - Install any desired plugins from the catalog
+      - "Open http://{host_ip}:8989 in your browser"
+      - "Go to Settings → Media Management (left sidebar)"
+      - "Scroll down to Root Folders and click 'Add Root Folder'"
+      - "Enter /tv and click OK"
+      - "Toggle 'Rename Episodes' to ON for organized file naming"
+      - "Go to Settings → Download Clients"
+      - "Click the '+' button to add a download client"
+      - "Select 'qBittorrent' from the list"
+      - "Configure: Host: {qbittorrent_host} | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
+      - "Set Category to 'sonarr' (create this category in qBittorrent first)"
+      - "Click Test, then Save"
+      - "Go to Settings → General to copy your API Key (needed for Prowlarr and Seerr)"
+      - "To add shows: Series → Add New → Search for a show → Select quality profile → Add"
 
   sonarr:
     name: Sonarr
@@ -102,17 +136,21 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:8989
+    setup_url: http://{host_ip}:8989
     setup_steps:
-      - Open Sonarr in your browser
-      - Go to Settings > Media Management
-      - "Click 'Add Root Folder' and enter: /tv"
-      - Enable 'Rename Episodes' and configure naming format to your preference
-      - Go to Settings > Download Clients
-      - Add your download client (qBittorrent, SABnzbd, etc.)
-      - "  - Use container name as hostname (e.g., 'qbittorrent')"
-      - "  - Set the appropriate port and credentials"
-      - Go to Settings > General and note your API Key (needed for Prowlarr/Seerr)
+      - "Open http://{host_ip}:7878 in your browser"
+      - "Go to Settings → Media Management (left sidebar)"
+      - "Scroll down to Root Folders and click 'Add Root Folder'"
+      - "Enter /movies and click OK"
+      - "Toggle 'Rename Movies' to ON for organized file naming"
+      - "Go to Settings → Download Clients"
+      - "Click the '+' button to add a download client"
+      - "Select 'qBittorrent' from the list"
+      - "Configure: Host: {qbittorrent_host} | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
+      - "Set Category to 'radarr' (create this category in qBittorrent first)"
+      - "Click Test, then Save"
+      - "Go to Settings → General to copy your API Key (needed for Prowlarr and Seerr)"
+      - "To add movies: Movies → Add New → Search for a movie → Select quality profile → Add"
 
   radarr:
     name: Radarr
@@ -129,17 +167,21 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:7878
+    setup_url: http://{host_ip}:7878
     setup_steps:
-      - Open Radarr in your browser
-      - Go to Settings > Media Management
-      - "Click 'Add Root Folder' and enter: /movies"
-      - Enable 'Rename Movies' and configure naming format to your preference
-      - Go to Settings > Download Clients
-      - Add your download client (qBittorrent, etc.)
-      - "  - Use container name as hostname (e.g., 'qbittorrent')"
-      - "  - Set the appropriate port and credentials"
-      - Go to Settings > General and note your API Key (needed for Prowlarr/Seerr)
+      - "Open http://{host_ip}:7878 in your browser"
+      - "Go to Settings → Media Management (left sidebar)"
+      - "Scroll down to Root Folders and click 'Add Root Folder'"
+      - "Enter /movies and click OK"
+      - "Toggle 'Rename Movies' to ON for organized file naming"
+      - "Go to Settings → Download Clients"
+      - "Click the '+' button to add a download client"
+      - "Select 'qBittorrent' from the list"
+      - "Configure: Host: qbittorrent | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
+      - "Set Category to 'radarr' (create this category in qBittorrent first)"
+      - "Click Test, then Save"
+      - "Go to Settings → General to copy your API Key (needed for Prowlarr and Seerr)"
+      - "To add movies: Movies → Add New → Search for a movie → Select quality profile → Add"
 
   lidarr:
     name: Lidarr
@@ -156,14 +198,21 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:8686
+    setup_url: http://{host_ip}:8686
     setup_steps:
-      - Open Lidarr in your browser
-      - Go to Settings > Media Management
-      - "Click 'Add Root Folder' and enter: /music"
-      - Configure track and album naming formats to your preference
-      - Go to Settings > Download Clients and add your download client
-      - Go to Settings > General and note your API Key (needed for Prowlarr)
+      - "Open http://{host_ip}:8686 in your browser"
+      - "Go to Settings → Media Management (left sidebar)"
+      - "Scroll down to Root Folders and click 'Add Root Folder'"
+      - "Enter /music and click OK"
+      - "Toggle 'Rename Music' to ON for organized file naming"
+      - "Go to Settings → Download Clients"
+      - "Click the '+' button to add a download client"
+      - "Select 'qBittorrent' from the list"
+      - "Configure: Host: qbittorrent | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
+      - "Set Category to 'Lidarr' (create this category in qBittorrent first)"
+      - "Click Test, then Save"
+      - "Go to Settings → General to copy your API Key (needed for Prowlarr and Seerr)"
+      - "To add music: Music → Add New → Search for music → Select quality profile → Add"
 
   mylar3:
     name: Mylar3
@@ -180,13 +229,16 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:8090
+    setup_url: http://{host_ip}:8090
     setup_steps:
-      - Open Mylar3 in your browser
-      - Go to Settings > Web Interface and set up authentication
-      - Go to Settings > Download Settings and configure your download client
-      - Go to Settings > Search Providers and add your indexers
-      - Configure comic naming and organization preferences
+      - "Open http://{host_ip}:8090 in your browser"
+      - "Click the gear icon (Settings) in the top right"
+      - "Go to Web Interface tab → Set a username and password → Save"
+      - "Go to Download Settings tab → Set Comic Location to /comics"
+      - "Configure your download client in the Download Settings section"
+      - "Go to Search Providers tab to add your indexers"
+      - "Click Save Config at the bottom"
+      - "To add comics: Comics → Add Comics → Search by series name"
 
   prowlarr:
     name: Prowlarr
@@ -200,18 +252,21 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:9696
+    setup_url: http://{host_ip}:9696
     setup_steps:
-      - Open Prowlarr in your browser
-      - Go to Indexers > Add Indexer
-      - Search for and add your preferred indexers
-      - Go to Settings > Apps
-      - "Click '+' to add each *arr app you installed:"
-      - "  - Prowlarr Server: http://prowlarr:9696"
-      - "  - App Server: http://<app-name>:<port> (e.g., http://radarr:7878)"
-      - "  - API Key: (from the app's Settings > General)"
-      - Repeat for each *arr app (Radarr, Sonarr, Lidarr, Readarr)
-      - If using FlareSolverr, add it in Settings > Indexers as a proxy
+      - "Open http://{host_ip}:9696 in your browser"
+      - "Set up authentication: Settings → General → Authentication → Select 'Forms' → Set username/password"
+      - "Add indexers: Indexers → Add Indexer → Search for your preferred sites"
+      - "Configure each indexer with your credentials/API keys and click Test, then Save"
+      - "Connect to your *arr apps: Settings → Apps → Click '+'"
+      - "Select the app (e.g., Radarr)"
+      - "Configure: Sync Level: 'Add and Remove Only' (recommended)"
+      - "Prowlarr Server: http://prowlarr:9696"
+      - "Radarr Server: http://radarr:7878 (use container name, not {host_ip})"
+      - "API Key: Paste from Radarr's Settings → General page"
+      - "Click Test, then Save"
+      - "Repeat for Sonarr (http://sonarr:8989), Lidarr (http://lidarr:8686), etc."
+      - "Prowlarr will now automatically sync all indexers to connected apps"
 
   jackett:
     name: Jackett
@@ -227,14 +282,20 @@ services:
       - PGID
       - TZ
       - AUTO_UPDATE=true
-    setup_url: http://localhost:9117
+    setup_url: http://{host_ip}:9117
     setup_steps:
-      - Open Jackett in your browser
-      - Click 'Add Indexer' to add your preferred indexers
-      - For each indexer, click the wrench icon to configure
-      - Copy the Torznab feed URL and API key
-      - In your *arr apps, go to Settings > Indexers > Add
-      - Select 'Torznab' and paste the URL and API key from Jackett
+      - "Open http://{host_ip}:9117 in your browser"
+      - "Click 'Add Indexer' button at the top"
+      - "Search for your preferred indexer sites and click the '+' to add"
+      - "Click the wrench icon next to each indexer to configure credentials"
+      - "Click Test to verify, then click the checkmark to save"
+      - "Copy the API Key from the top right of the Jackett page"
+      - "For each indexer, click 'Copy Torznab Feed' to get the URL"
+      - "In Radarr/Sonarr: Settings → Indexers → Add → Torznab"
+      - "Paste the Torznab URL and Jackett API Key"
+      - "Select appropriate categories (e.g., 2000,2010,2020 for Movies)"
+      - "Click Test, then Save"
+      - "Note: Prowlarr is recommended over Jackett for easier management"
 
   qbittorrent:
     name: qBittorrent
@@ -252,19 +313,21 @@ services:
       - PGID
       - TZ
       - WEBUI_PORT=8080
-    setup_url: http://localhost:8080
+    setup_url: http://{host_ip}:8080
     setup_steps:
-      - Open qBittorrent in your browser
-      - "Default credentials: admin / adminadmin"
-      - "IMPORTANT: Immediately change the password in Tools > Options > Web UI"
-      - Go to Tools > Options > Downloads
-      - "  - Set 'Default Save Path' to: /downloads/complete"
-      - "  - Set 'Keep incomplete torrents in' to: /downloads/incomplete"
-      - Go to Tools > Options > BitTorrent
-      - "  - Configure seeding limits based on your preferences"
-      - "Create categories for each *arr app:"
-      - "  - Right-click in left panel > New Category"
-      - "  - Create: radarr, sonarr, lidarr, readarr (as needed)"
+      - "Open http://{host_ip}:8080 in your browser"
+      - "⚠️ IMPORTANT: The default password is randomly generated. Run: docker logs qbittorrent | grep password"
+      - "Login with Username: admin and the password from the logs"
+      - "IMMEDIATELY change password: Tools → Options → Web UI → Authentication section"
+      - "Set a new password and click Save"
+      - "Configure downloads: Tools → Options → Downloads"
+      - "Set 'Default Save Path' to /downloads/complete"
+      - "Enable 'Keep incomplete torrents in' and set to /downloads/incomplete"
+      - "Create categories for *arr apps: Right-click in left sidebar → New Category"
+      - "Create categories named: radarr, sonarr, lidarr (one for each *arr app)"
+      - "Leave 'Save path' as default for each category"
+      - "(Optional) Set seeding limits: Tools → Options → BitTorrent → Set ratio limit (e.g., 1.0)"
+      - "Verify listening port: Tools → Options → Connection → Listening Port should be 6881"
 
   bazarr:
     name: Bazarr
@@ -281,19 +344,26 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:6767
+    setup_url: http://{host_ip}:6767
     setup_steps:
-      - Open Bazarr in your browser
-      - Go to Settings > Sonarr (if installed)
-      - "  - Enable Sonarr, set Address: sonarr, Port: 8989"
-      - "  - Enter API Key from Sonarr Settings > General"
-      - Go to Settings > Radarr (if installed)
-      - "  - Enable Radarr, set Address: radarr, Port: 7878"
-      - "  - Enter API Key from Radarr Settings > General"
-      - Go to Settings > Providers
-      - "  - Add subtitle providers (OpenSubtitles, Subscene, etc.)"
-      - Go to Settings > Languages
-      - "  - Configure your preferred subtitle languages"
+      - "Open http://{host_ip}:6767 in your browser"
+      - "Connect to Sonarr: Settings → Sonarr (left sidebar)"
+      - "Toggle 'Enabled' to ON"
+      - "Address: sonarr (container name, NOT {host_ip} or localhost)"
+      - "Port: 8989"
+      - "API Key: Paste from Sonarr's Settings → General"
+      - "Click Test button - verify green success message"
+      - "Click Save"
+      - "Connect to Radarr: Settings → Radarr"
+      - "Toggle 'Enabled' to ON"
+      - "Address: radarr | Port: 7878 | API Key: from Radarr"
+      - "Click Test, then Save"
+      - "Add subtitle providers: Settings → Providers → Click '+'"
+      - "Recommended: OpenSubtitles.com (requires free account), Subscene, Supersubtitles"
+      - "Configure credentials for each provider"
+      - "Set languages: Settings → Languages → Add your preferred subtitle languages"
+      - "Create a Language Profile with your languages in priority order"
+      - "Bazarr will now automatically download subtitles for your media"
 
   seerr:
     name: Seerr
@@ -305,19 +375,25 @@ services:
       /app/config: config
     env:
       - TZ
-    setup_url: http://localhost:5055
+    setup_url: http://{host_ip}:5055
     setup_steps:
-      - Open Seerr in your browser
-      - "Select your media server type (Jellyfin or Plex)"
-      - Sign in with your media server account
-      - "Add Radarr server (if installed):"
-      - "  - Hostname: radarr, Port: 7878"
-      - "  - API Key: (from Radarr Settings > General)"
-      - "Add Sonarr server (if installed):"
-      - "  - Hostname: sonarr, Port: 8989"
-      - "  - API Key: (from Sonarr Settings > General)"
-      - Import your media libraries
-      - Configure user permissions as desired
+      - "Open http://{host_ip}:5055 in your browser"
+      - "Click 'Sign in with Jellyfin' or 'Sign in with Plex' depending on your media server"
+      - "For Jellyfin: Enter http://jellyfin:8096 as the URL, then sign in with your Jellyfin admin account"
+      - "For Plex: Sign in with your Plex account"
+      - "Add Radarr: Settings → Services → Click 'Add Radarr Server'"
+      - "Default Server: ON | 4K Server: OFF (unless you have a 4K library)"
+      - "Server Name: Radarr"
+      - "Hostname or IP: radarr (container name)"
+      - "Port: 7878"
+      - "API Key: Paste from Radarr's Settings → General"
+      - "Click Test, then select Quality Profile and Root Folder"
+      - "Click 'Add Server'"
+      - "Add Sonarr: Settings → Services → Click 'Add Sonarr Server'"
+      - "Hostname: sonarr | Port: 8989 | API Key: from Sonarr"
+      - "Click Test, select profiles, then Add Server"
+      - "Run library scan: Settings → Jellyfin/Plex → 'Start Scan'"
+      - "Share http://{host_ip}:5055 with family/friends for content requests"
 
   tautulli:
     name: Tautulli
@@ -331,15 +407,18 @@ services:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:8181
+    setup_url: http://{host_ip}:8181
     setup_steps:
-      - Open Tautulli in your browser
-      - Complete the setup wizard
-      - "Connect to your Plex server:"
-      - "  - Sign in with your Plex account, or"
-      - "  - Manually enter Plex server details"
-      - Configure notification agents if desired
-      - Explore the dashboard for viewing statistics
+      - "Open http://{host_ip}:8181 in your browser"
+      - "Click 'Sign in with Plex' (easiest method)"
+      - "Sign in with your Plex account credentials"
+      - "Select your Plex server from the list"
+      - "Click 'Verify Server' - should show green checkmark"
+      - "Click 'Finish' to complete setup"
+      - "Explore the dashboard to see viewing history and statistics"
+      - "(Optional) Set up notifications: Settings → Notification Agents"
+      - "Click '+' to add Discord, Email, Telegram, or other notification services"
+      - "Tautulli will now track all Plex activity and build viewing statistics"
 
   audiobookshelf:
     name: Audiobookshelf
@@ -355,16 +434,20 @@ services:
       /podcasts: podcasts
     env:
       - TZ
-    setup_url: http://localhost:13378
+    setup_url: http://{host_ip}:13378
     setup_steps:
-      - Open Audiobookshelf in your browser
-      - Create an admin account
-      - "Add libraries:"
-      - "  - Click 'Add Library'"
-      - "  - Select library type (Audiobooks or Podcasts)"
-      - "  - Add the appropriate folder path"
-      - Configure metadata providers in Settings
-      - Install mobile apps for on-the-go listening
+      - "Open http://{host_ip}:13378 in your browser"
+      - "Create your admin account with username and password"
+      - "Click 'Create Library' to add your audiobook library"
+      - "Name: Audiobooks | Media Type: Audiobooks"
+      - "Click 'Add Folder' and select /audiobooks"
+      - "Click Create"
+      - "(Optional) Add podcast library: Same process with /podcasts folder and 'Podcasts' type"
+      - "Configure metadata: Settings (gear icon) → Item Metadata → Enable providers"
+      - "Recommended: Audible, Google Books, iTunes"
+      - "Install mobile apps: Search 'Audiobookshelf' on iOS App Store or Google Play"
+      - "Connect using http://{host_ip}:13378 and your login credentials"
+      - "Listening progress syncs automatically across all devices"
 
   homarr:
     name: Homarr
@@ -380,16 +463,22 @@ services:
       - TZ
       - SECRET_ENCRYPTION_KEY
     needs_encryption_key: true
-    setup_url: http://localhost:7575
+    setup_url: http://{host_ip}:7575
     setup_steps:
-      - Open Homarr in your browser
-      - Create an admin account
-      - Click 'Add Tile' to add your services to the dashboard
-      - "For each service, you can add:"
-      - "  - App tiles with direct links"
-      - "  - Integration tiles that show status/stats"
-      - Configure integrations by entering service URLs and API keys
-      - Customize the layout by dragging and arranging tiles
+      - "Open http://{host_ip}:7575 in your browser"
+      - "The onboarding wizard will appear on first launch"
+      - "Create your admin account with username and password"
+      - "Configure basic settings (defaults are fine for most users)"
+      - "Click 'Finish' to complete onboarding"
+      - "Add your services: Click 'Add Tile' → 'App'"
+      - "Enter app name (e.g., Radarr), URL (http://radarr:7878), and select an icon"
+      - "Click Save"
+      - "Add integrations for live status: Edit tile → Integrations tab"
+      - "Select integration type (Radarr, Sonarr, qBittorrent, etc.)"
+      - "Enter the internal URL (http://radarr:7878) and API key"
+      - "This shows live stats like queue size, disk space, etc."
+      - "Drag tiles to rearrange, resize by dragging corners"
+      - "Add widgets: Calendar, weather, system stats, and more"
 
   flaresolverr:
     name: FlareSolverr
@@ -403,51 +492,20 @@ services:
       - LOG_LEVEL=info
     setup_url: null
     setup_steps:
-      - FlareSolverr runs automatically - no web interface needed
+      - "FlareSolverr runs automatically with no web interface"
       - "To use with Prowlarr:"
-      - "  - Go to Prowlarr > Settings > Indexers"
-      - "  - Add a new proxy with URL: http://flaresolverr:8191"
-      - "  - Tag it appropriately (e.g., 'flaresolverr')"
-      - "  - Apply this tag to indexers that need Cloudflare bypass"
-      - "To use with Jackett:"
-      - "  - Go to Jackett settings"
-      - "  - Set FlareSolverr URL to: http://flaresolverr:8191"
-
-  gluetun:
-    name: gluetun
-    cap_add:
-      - NET_ADMIN
-    description: VPN client for secure torrenting and Usenet
-    category: utility
-    port: 8888:8888/tcp
-    image: qmcgaw/gluetun:latest
-    volumes:
-      /gluetun: /gluetun
-    extra_volumes:
-      /etc/localtime: /etc/localtime:ro
-    env:
-      # See https://github.com/qdm12/gluetun-wiki/tree/main/setup#setup
-      - VPN_SERVICE_PROVIDER=ivpn
-      - VPN_TYPE=openvpn
-      # OpenVPN:
-      - OPENVPN_USER=
-      - OPENVPN_PASSWORD=
-      # Wireguard:
-      # - WIREGUARD_PRIVATE_KEY=wOEI9rqqbDwnN8/Bpp22sVz48T71vJ4fYmFWujulwUU=
-      # - WIREGUARD_ADDRESSES=10.64.222.21/32
-      # Timezone for accurate log times
-      - TZ=
-      # Server list updater
-      # See https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#update-the-vpn-servers-list
-      - UPDATER_PERIOD=
-    setup_url: null
-    setup_steps:
-      - Configure environment variables with your VPN credentials
-      - "Set VPNSP to your provider (nordvpn, protonvpn, etc.)"
-      - "Set OPENVPN_USER and OPENVPN_PASSWORD"
-      - "Set FIREWALL_OUTBOUND_SUBNETS to your docker network (e.g., 172.20.0.0/16)"
-      - "All traffic from connected containers will route through VPN"
-      - "Use network_mode: service:gluetun for other containers to use VPN"
+      - "Open Prowlarr → Settings → Indexers"
+      - "Under 'Indexer Proxies', click the '+' button"
+      - "Select 'FlareSolverr'"
+      - "Name: FlareSolverr"
+      - "Tags: Create a tag like 'flaresolverr'"
+      - "Host: http://flaresolverr:8191"
+      - "Request Timeout: 60 (default)"
+      - "Click Test, then Save"
+      - "Apply to indexers: Edit any indexer that needs Cloudflare bypass"
+      - "Scroll to bottom and add the 'flaresolverr' tag"
+      - "Click Test and Save"
+      - "To use with Jackett: Click gear icon → FlareSolverr API URL: http://flaresolverr:8191"
 
   nzbget:
     name: NZBGet
@@ -458,21 +516,32 @@ services:
     volumes:
       /config: config
     media_volumes:
-      /data: . # Mount entire media dir as /data
+      /data: .
     env:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:6789
+    setup_url: http://{host_ip}:6789
     setup_steps:
-      - Open NZBGet in your browser
-      - "Default login: admin / tegbzn6789"
-      - "Go to Settings > Paths"
-      - "Set Destination directory: /data/downloads/complete"
-      - "Set Temporary directory: /data/downloads/incomplete"
-      - "Go to Settings > Security"
-      - "Change the default password"
-      - "Enable RPC control for automation apps"
+      - "Open http://{host_ip}:6789 in your browser"
+      - "Login with default credentials: Username: nzbget | Password: tegbzn6789"
+      - "⚠️ IMMEDIATELY change password: Settings → SECURITY → ControlPassword"
+      - "Also change ControlUsername if desired"
+      - "Click Save all changes at the bottom"
+      - "Configure paths: Settings → PATHS"
+      - "MainDir: /data/downloads"
+      - "DestDir: ${MainDir}/complete"
+      - "InterDir: ${MainDir}/incomplete"
+      - "Add your Usenet server: Settings → NEWS-SERVERS"
+      - "Click 'Add Server'"
+      - "Host: Your provider's server address"
+      - "Port: 563 (SSL) or 119 (non-SSL)"
+      - "Username/Password: Your Usenet provider credentials"
+      - "Encryption: Yes (for SSL)"
+      - "Connections: 10-20 (check your provider's limits)"
+      - "Click Save all changes"
+      - "In *arr apps: Settings → Download Clients → Add → NZBGet"
+      - "Host: nzbget | Port: 6789 | Username: nzbget | Password: your new password"
 
   sabnzbd:
     name: SABnzbd
@@ -483,19 +552,32 @@ services:
     volumes:
       /config: config
     media_volumes:
-      /data: . # Mount entire media dir as /data
+      /data: .
     env:
       - PUID
       - PGID
       - TZ
-    setup_url: http://localhost:8081
+    setup_url: http://{host_ip}:8081
     setup_steps:
-      - Open SABnzbd in your browser
-      - Complete the quick-start wizard
-      - Add your Usenet server details
-      - "Set Completed Download Folder to: /data/downloads/complete"
-      - "Set Incomplete Download Folder to: /data/downloads/incomplete"
-      - Note your API key from Config > General for use in *arr apps
+      - "Open http://{host_ip}:8081 in your browser"
+      - "Select your language and click 'Start Wizard'"
+      - "Add your Usenet server:"
+      - "Host: Your provider's server address"
+      - "Port: 563 (SSL) or 119 (non-SSL)"
+      - "Username/Password: Your Usenet provider credentials"
+      - "SSL: Check the box for secure connection"
+      - "Connections: 10-20 (check your provider's limits)"
+      - "Click 'Test Server' to verify connection"
+      - "Click 'Next' to continue"
+      - "Set up access: Create a username and password for the web interface"
+      - "Click 'Next', then 'Go to SABnzbd'"
+      - "Configure folders: Click gear icon → Folders"
+      - "Completed Download Folder: /data/downloads/complete"
+      - "Temporary Download Folder: /data/downloads/incomplete"
+      - "Get your API key: Config → General → API Key (copy this)"
+      - "In *arr apps: Settings → Download Clients → Add → SABnzbd"
+      - "Host: sabnzbd | Port: 8081 | API Key: paste from SABnzbd"
+      - "Create matching categories in SABnzbd for each *arr app (radarr, sonarr, etc.)"
 
 categories:
   media_server: Media Servers
@@ -505,3 +587,4 @@ categories:
   companion: Companion Apps
   dashboard: Dashboards
   utility: Utilities
+  download: Usenet Clients

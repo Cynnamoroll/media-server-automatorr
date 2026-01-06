@@ -24,12 +24,14 @@ Inspired by the [ezarr project](https://github.com/Luctia/ezarr) but written fro
 ## Quick Start
 
 1. Clone or download this repository
-2. Run the setup script:
+2. Install Python and PyYaml
+  - To install PyYaml, install `pip` and then run `pip install pyyaml`
+3. Run the setup script:
    ```bash
    python3 setup.py
    ```
 
-3. Follow the interactive prompts
+4. Follow the interactive prompts
 
 ## Supported Services
 
@@ -71,7 +73,6 @@ Inspired by the [ezarr project](https://github.com/Luctia/ezarr) but written fro
 ### VPN Tunneling
 
   - **Gluetun** - Lightweight VPN client to tunnel docker containers
-    - Please see [the setup guide](https://github.com/qdm12/gluetun-wiki?tab=readme-ov-file) for usage and modify `./templates/docker-services.yaml` directly before running `setup.py`
   
 ### Usenet
 
