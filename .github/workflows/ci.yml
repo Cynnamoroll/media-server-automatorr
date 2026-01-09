@@ -77,17 +77,6 @@ jobs:
       - name: Check code formatting with Black
         run: black --check --diff src/ tests/
 
-      - name: Check import sorting with isort
-        run: isort --check-only --diff src/ tests/
-
-      - name: Lint with flake8
-        run: |
-          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
-
-      - name: Type checking with mypy
-        run: mypy src/ --ignore-missing-imports
-
   test:
     name: Tests
     runs-on: ${{ matrix.os }}

@@ -15,11 +15,19 @@ from .directory_manager import DirectoryManager
 from .file_generator import FileGenerator
 from .system_validators import ContainerTester, SystemValidator
 from .template_loader import TemplateLoader
-from .user_interface import (ProgressReporter, ServiceSelector,
-                             UserConfigCollector)
-from .utils import (Colors, get_local_network_ip, get_timezone, print_error,
-                    print_header, print_info, print_success, print_warning,
-                    prompt_yes_no, wait_for_done)
+from .user_interface import ProgressReporter, ServiceSelector, UserConfigCollector
+from .utils import (
+    Colors,
+    get_local_network_ip,
+    get_timezone,
+    print_error,
+    print_header,
+    print_info,
+    print_success,
+    print_warning,
+    prompt_yes_no,
+    wait_for_done,
+)
 from .vpn_config import GluetunConfigurator
 
 

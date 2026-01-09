@@ -10,12 +10,26 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.utils import (Colors, generate_encryption_key,
-                       get_docker_network_subnet, get_local_network_ip,
-                       get_timezone, print_error, print_header, print_info,
-                       print_link, print_success, print_warning, prompt,
-                       prompt_secret, prompt_yes_no, replace_placeholders,
-                       run_command, validate_subnet_format, wait_for_done)
+from src.utils import (
+    Colors,
+    generate_encryption_key,
+    get_docker_network_subnet,
+    get_local_network_ip,
+    get_timezone,
+    print_error,
+    print_header,
+    print_info,
+    print_link,
+    print_success,
+    print_warning,
+    prompt,
+    prompt_secret,
+    prompt_yes_no,
+    replace_placeholders,
+    run_command,
+    validate_subnet_format,
+    wait_for_done,
+)
 
 
 class TestColors:

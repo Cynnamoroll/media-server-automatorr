@@ -9,8 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.system_validators import (ContainerTester, ServiceTester,
-                                   SystemValidator)
+from src.system_validators import ContainerTester, ServiceTester, SystemValidator
 
 
 class TestSystemValidator:

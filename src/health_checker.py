@@ -19,8 +19,14 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-from .utils import (Colors, print_error, print_info, print_success,
-                    print_warning, run_command)
+from .utils import (
+    Colors,
+    print_error,
+    print_info,
+    print_success,
+    print_warning,
+    run_command,
+)
 
 
 class ServiceHealthChecker:

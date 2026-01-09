@@ -6,8 +6,16 @@ import os
 import sys
 from typing import Dict, List, Optional, Tuple
 
-from .utils import (Colors, print_error, print_header, print_info,
-                    print_success, print_warning, prompt, prompt_yes_no)
+from .utils import (
+    Colors,
+    print_error,
+    print_header,
+    print_info,
+    print_success,
+    print_warning,
+    prompt,
+    prompt_yes_no,
+)
 
 
 class ServiceSelector:

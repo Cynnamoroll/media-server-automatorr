@@ -5,10 +5,20 @@ VPN configuration module for Gluetun setup.
 from typing import Dict, Optional
 
 from .constants import VPN_PROVIDERS
-from .utils import (Colors, get_docker_network_subnet, print_error,
-                    print_header, print_info, print_link, print_success,
-                    print_warning, prompt, prompt_secret, prompt_yes_no,
-                    validate_subnet_format)
+from .utils import (
+    Colors,
+    get_docker_network_subnet,
+    print_error,
+    print_header,
+    print_info,
+    print_link,
+    print_success,
+    print_warning,
+    prompt,
+    prompt_secret,
+    prompt_yes_no,
+    validate_subnet_format,
+)
 
 
 class GluetunConfigurator:
