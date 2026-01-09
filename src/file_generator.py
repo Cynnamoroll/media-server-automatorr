@@ -8,16 +8,9 @@ from typing import Dict, List, Optional
 
 from .compose_generator import ComposeGenerator
 from .template_loader import TemplateLoader
-from .utils import (
-    Colors,
-    generate_encryption_key,
-    get_timezone,
-    print_error,
-    print_info,
-    print_success,
-    replace_placeholders,
-    run_command,
-)
+from .utils import (Colors, generate_encryption_key, get_timezone, print_error,
+                    print_info, print_success, replace_placeholders,
+                    run_command)
 from .vpn_config import GluetunConfigurator
 
 

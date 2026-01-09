@@ -6,13 +6,8 @@ import os
 from pathlib import Path
 from typing import List, Tuple
 
-from .utils import (
-    print_error,
-    print_info,
-    print_success,
-    print_warning,
-    run_command,
-)
+from .utils import (print_error, print_info, print_success, print_warning,
+                    run_command)
 
 
 class DirectoryManager:

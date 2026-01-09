@@ -8,14 +8,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .utils import (
-    Colors,
-    print_error,
-    print_info,
-    print_success,
-    print_warning,
-    run_command,
-)
+from .utils import (Colors, print_error, print_info, print_success,
+                    print_warning, run_command)
 
 
 class SystemValidator:

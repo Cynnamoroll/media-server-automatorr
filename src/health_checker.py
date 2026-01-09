@@ -15,18 +15,12 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
-from urllib.error import URLError
 
-from .utils import (
-    Colors,
-    print_error,
-    print_info,
-    print_success,
-    print_warning,
-    run_command,
-)
+from .utils import (Colors, print_error, print_info, print_success,
+                    print_warning, run_command)
 
 
 class ServiceHealthChecker:
