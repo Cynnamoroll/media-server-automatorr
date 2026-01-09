@@ -1,0 +1,475 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.8"
+
+jobs:
+  system-validation:
+    name: System Prerequisites
+    runs-on: ubuntu-latest
+    outputs:
+      system-status: ${{ steps.validation.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML requests
+
+      - name: Run enhanced validation
+        id: validation
+        run: |
+          python scripts/validate-pipeline.py --skip-integration
+          echo "status=success" >> $GITHUB_OUTPUT
+
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    needs: system-validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('tests/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+
+      - name: Check code formatting with Black
+        run: black --check --diff src/ tests/
+
+      - name: Check import sorting with isort
+        run: isort --check-only --diff src/ tests/
+
+      - name: Lint with flake8
+        run: |
+          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Type checking with mypy
+        run: mypy src/ --ignore-missing-imports
+
+  test:
+    name: Tests
+    runs-on: ${{ matrix.os }}
+    needs: [system-validation, lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-20.04]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        exclude:
+          # Reduce matrix size by excluding some combinations
+          - os: ubuntu-20.04
+            python-version: "3.9"
+          - os: ubuntu-20.04
+            python-version: "3.10"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-pip-${{ hashFiles('tests/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-pip-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl wget
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML  # Main application dependency
+
+      - name: Run unit tests
+        run: |
+          cd tests && python -m pytest . -v --tb=short --cov=../src --cov-report=xml --cov-report=term-missing \
+            -m "not integration and not docker and not network" \
+            --timeout=60
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: matrix.python-version == '3.8' && matrix.os == 'ubuntu-latest'
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [system-validation, lint, test]
+
+    services:
+      docker:
+        image: docker:24-dind
+        options: --privileged
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML
+
+      - name: Check Docker installation
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Run integration tests
+        run: |
+          cd tests && python -m pytest . -v --tb=short \
+            -m "integration and not network" \
+            --timeout=300
+
+      - name: Run Docker-dependent tests
+        run: |
+          # Add user to docker group and restart docker
+          sudo usermod -aG docker $USER
+          sudo systemctl restart docker
+
+          # Wait for docker to be ready
+          timeout 60s bash -c 'until docker info > /dev/null 2>&1; do sleep 1; done'
+
+          cd tests && python -m pytest . -v --tb=short \
+            -m "docker and not network" \
+            --timeout=300
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: [system-validation, lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run Bandit security scan
+        run: bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Check dependencies for security vulnerabilities
+        run: |
+          pip install -r tests/requirements.txt
+          safety check --json --output safety-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  functional-tests:
+    name: Functional Tests
+    runs-on: ubuntu-latest
+    needs: [system-validation, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyYAML
+
+      - name: Test script import and basic functionality
+        run: |
+          cd ${{ github.workspace }}
+          python3 -c "
+          import sys
+          sys.path.insert(0, 'src')
+
+          # Test imports
+          from src.setup_core import MediaServerSetup
+          from src.system_validators import SystemValidator, ContainerTester
+          from src.directory_manager import DirectoryManager
+          from src.user_interface import ServiceSelector, UserConfigCollector
+          from src.file_generator import FileGenerator
+
+          print('✓ All imports successful')
+
+          # Test basic instantiation
+          setup = MediaServerSetup()
+          validator = SystemValidator()
+
+          print('✓ Basic instantiation successful')
+          print('✓ Functional tests passed')
+          "
+
+      - name: Test template loading
+        run: |
+          cd ${{ github.workspace }}
+          python3 -c "
+          import sys
+          sys.path.insert(0, 'src')
+
+          from src.template_loader import TemplateLoader
+
+          loader = TemplateLoader()
+
+          # Test template validation
+          try:
+              issues = loader.validate_services()
+              print(f'✓ Template validation completed. Issues found: {len(issues)}')
+
+              services = loader.get_services()
+              print(f'✓ Loaded {len(services)} services')
+
+              categories = loader.get_categories()
+              print(f'✓ Loaded {len(categories)} categories')
+
+          except Exception as e:
+              print(f'Template loading test: {e}')
+              exit(1)
+          "
+
+      - name: Test utility functions
+        run: |
+          cd ${{ github.workspace }}
+          python3 -c "
+          import sys
+          sys.path.insert(0, 'src')
+
+          from src.utils import (
+              generate_encryption_key,
+              get_timezone,
+              validate_subnet_format,
+              replace_placeholders
+          )
+
+          # Test utility functions
+          key = generate_encryption_key()
+          assert len(key) == 32, 'Encryption key should be 32 characters'
+          print('✓ Encryption key generation works')
+
+          tz = get_timezone()
+          assert isinstance(tz, str), 'Timezone should be string'
+          print(f'✓ Timezone detection works: {tz}')
+
+          assert validate_subnet_format('192.168.1.0/24') == True
+          assert validate_subnet_format('invalid') == False
+          print('✓ Subnet validation works')
+
+          result = replace_placeholders('Hello {name}', {'name': 'World'})
+          assert result == 'Hello World'
+          print('✓ Placeholder replacement works')
+
+          print('✓ All utility functions work correctly')
+          "
+
+  coverage-report:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: [system-validation, test, integration-tests]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+
+      - name: Run full test suite with coverage
+        run: |
+          cd tests && python -m pytest . --cov=../src --cov-report=html --cov-report=xml --cov-report=term-missing \
+            -m "not network" --timeout=300
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-reports
+          path: |
+            htmlcov/
+            coverage.xml
+
+      - name: Coverage comment
+        uses: py-cov-action/python-coverage-comment-action@v3
+        if: github.event_name == 'pull_request'
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-validation:
+    name: Build Validation
+    runs-on: ubuntu-latest
+    needs: [system-validation, lint, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validate project structure
+        run: |
+          # Check required files exist
+          test -f setup.py || (echo "setup.py missing" && exit 1)
+          test -f README.md || (echo "README.md missing" && exit 1)
+          test -d src/ || (echo "src/ directory missing" && exit 1)
+          test -d templates/ || (echo "templates/ directory missing" && exit 1)
+          test -d tests/ || (echo "tests/ directory missing" && exit 1)
+
+          # Check main entry point
+          test -f setup.py || (echo "Main setup.py missing" && exit 1)
+
+          # Check critical source files
+          test -f src/setup_core.py || (echo "setup_core.py missing" && exit 1)
+          test -f src/system_validators.py || (echo "system_validators.py missing" && exit 1)
+          test -f templates/docker-services.yaml || (echo "docker-services.yaml missing" && exit 1)
+
+          echo "✓ Project structure validation passed"
+
+      - name: Validate YAML templates
+        run: |
+          python3 -c "
+          import yaml
+
+          # Validate docker-services.yaml
+          with open('templates/docker-services.yaml', 'r') as f:
+              data = yaml.safe_load(f)
+
+          assert 'services' in data, 'services section missing'
+          assert 'categories' in data, 'categories section missing'
+
+          services = data['services']
+          assert len(services) > 0, 'No services defined'
+
+          # Check required fields in services
+          for service_id, service in services.items():
+              required_fields = ['name', 'description', 'category', 'image']
+              for field in required_fields:
+                  assert field in service, f'Service {service_id} missing {field}'
+
+          print(f'✓ YAML validation passed - {len(services)} services found')
+          "
+
+  notify-status:
+    name: Notify Build Status
+    runs-on: ubuntu-latest
+    needs:
+      [
+        system-validation,
+        lint,
+        test,
+        integration-tests,
+        security-scan,
+        functional-tests,
+        coverage-report,
+        build-validation,
+      ]
+    if: always()
+
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [[ "${{ needs.system-validation.result }}" == "success" && \
+                "${{ needs.lint.result }}" == "success" && \
+                "${{ needs.test.result }}" == "success" && \
+                "${{ needs.functional-tests.result }}" == "success" && \
+                "${{ needs.build-validation.result }}" == "success" ]]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=All required checks passed ✅" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=Some checks failed ❌" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create status summary
+        run: |
+          echo "## Build Status Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| System Validation | ${{ needs.system-validation.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Quality & Linting | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scanning | ${{ needs.security-scan.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Functional Tests | ${{ needs.functional-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Coverage Report | ${{ needs.coverage-report.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Validation | ${{ needs.build-validation.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Status: ${{ steps.status.outputs.message }}**" >> $GITHUB_STEP_SUMMARY

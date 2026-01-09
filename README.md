@@ -1,167 +1,68 @@
-# Media Server Setup Script
+# Media Server Automatorr
 
-A user-friendly, interactive Python script to deploy a complete media server stack using Docker.
-
-Inspired by the [ezarr project](https://github.com/Luctia/ezarr) but written from scratch with a focus on user experience and guided setup.
-
-## Features
-
-- **Interactive Setup**: Step-by-step prompts guide you through the entire process
-- **Service Selection**: Choose from 15+ services organized by category
-- **Automatic User Management**: Creates dedicated users with proper permissions
-- **Docker Compose Generation**: Automatically generates optimized configuration
-- **Setup Guide**: Creates both terminal walkthrough and markdown documentation
-- **Hardware Agnostic**: Works with any hardware configuration
-
-## Prerequisites
-
-- Ubuntu Server 22.04+ (or similar Debian-based distribution)
-- Python 3.8+
-- Docker and Docker Compose V2
-  - Please ensure you follow the [Docker post-installation steps](https://docs.docker.com/engine/install/linux-postinstall/) or the script will not work
-- sudo privileges
+An interactive Python script to deploy a complete media server stack using Docker Compose.
 
 ## Quick Start
 
-1. Clone or download this repository
-2. Install Python and PyYaml
-  - To install PyYaml, install `pip` and then run `pip install pyyaml`
-3. Run the setup script:
-   ```bash
-   python3 setup.py
-   ```
+**Prerequisites:** Ubuntu 22.04+, Python 3.8+, Docker & Docker Compose V2
 
-4. Follow the interactive prompts
+```bash
+# Clone and run
+git clone https://github.com/Cynnamoroll/media-server-automatorr.git
+cd media-server-automatorr
+pip install PyYAML
+python3 setup.py
+```
 
-## Supported Services
+## What It Does
 
-### Media Servers
+- **Interactive Setup**: Guides you through service selection and configuration
+- **15+ Services**: Jellyfin/Plex, Sonarr/Radarr, qBittorrent, Prowlarr, and more
+- **VPN Integration**: Optional Gluetun VPN for secure downloads
+- **Auto Configuration**: Generates docker-compose.yml and setup guides
+- **User Management**: Creates proper permissions automatically
 
-  - **Jellyfin** - Free and open-source media server
-  - **Plex** - Feature-rich media server (some features require Plex Pass)
-  - **Emby** - Personal media server with live TV support
+## Services Available
 
-### *Arr Suite (Media Management)
+**Media Servers**: Jellyfin, Plex, Emby  
+**Management**: Sonarr, Radarr, Lidarr, Readarr, Mylar3  
+**Indexers**: Prowlarr, Jackett  
+**Downloads**: qBittorrent, NZBGet, SABnzbd  
+**Extras**: Bazarr, Seerr, Tautulli, Homarr, Audiobookshelf  
+**Utilities**: Gluetun (VPN), FlareSolverr, Watchtower
 
-  - **Sonarr** - TV show collection manager
-  - **Radarr** - Movie collection manager
-  - **Lidarr** - Music collection manager
-  - **Readarr** - Book/audiobook collection manager
-  - **Mylar3** - Comic book collection manager
+## After Setup
 
-### Indexers
+```bash
+cd /opt/docker/compose  # or your chosen directory
+docker compose up -d    # Start services
+docker compose ps       # Check status
+```
 
-  - **Prowlarr** - Unified indexer manager for all *arr apps
-  - **Jackett** - Alternative indexer proxy
+Access your services at `http://your-server-ip:port` - the setup script creates a `SETUP_GUIDE.md` with specific ports and configuration steps.
 
-### Download Clients
+## Common Issues
 
-  - **qBittorrent** - Torrent download client
-
-### Companion Apps
-
-  - **Bazarr** - Automatic subtitle downloader
-  - **Seerr** - Request management for Plex and Jellyfin
-  - **Tautulli** - Plex monitoring and statistics
-  - **Audiobookshelf** - Audiobook and podcast server
-
-### Dashboards & Utilities
-
-  - **Homarr** - Customizable dashboard for all services
-  - **FlareSolverr** - Cloudflare bypass proxy for indexers
-  
-### VPN Tunneling
-
-  - **Gluetun** - Lightweight VPN client to tunnel docker containers
-  
-### Usenet
-
-  - **NZBGet** - High-performance usenet download client
-  - **SabNZBd** - Easy to use usenet download client
+**Can't access services**: Check firewall, try server IP instead of localhost  
+**Docker permission denied**: `sudo usermod -aG docker $USER` then logout/login  
+**VPN not working**: Check `docker logs gluetun` and verify credentials  
+***arr apps can't connect**: Use 'gluetun' as qBittorrent host if VPN enabled
 
 ## Directory Structure
 
-After setup, your directories will be organized as follows:
+```
+/opt/docker/compose/     # Docker configs
+├── docker-compose.yml  
+├── .env
+└── SETUP_GUIDE.md
 
-```plaintext
-/opt/docker/              # (or your chosen Docker directory)
-├── compose/
-│   ├── docker-compose.yml
-│   ├── .env
-│   └── SETUP_GUIDE.md
-├── sonarr/config/
-├── radarr/config/
-├── jellyfin/config/
-└── ... (other services)
-
-/srv/media/               # (or your chosen media directory)
+/srv/media/              # Media files
 ├── downloads/
-│   ├── incomplete/
-│   └── complete/
 ├── movies/
 ├── tv/
-├── music/
-├── books/
-└── comics/
+└── music/
 ```
 
-## Post-Installation
+## Inspiration
 
-After running the setup script:
-
-  - Start your services: docker compose up -d
-  - Follow the generated SETUP_GUIDE.md for service configuration
-  - Configure each service through its web interface
-
-Useful Commands
-
-```Bash
-# Start all services
-docker compose up -d
-
-# Stop all services
-docker compose down
-
-# View logs
-docker compose logs -f
-
-# Update all containers
-docker compose pull
-docker compose up -d
-
-# Check status
-docker compose ps
-```
-
-## Automatic Updates
-
-The setup includes **Watchtower**, which automatically updates your containers daily.
-
-# Troubleshooting
-
-## Permission Issues
-
-```Bash
-
-sudo chown -R $(id -u):$(id -g) /path/to/docker/dir
-sudo chown -R $(id -u):$(id -g) /path/to/media/dir
-```
-
-Docker Permission Denied
-
-```Bash
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-## Container Won't Start
-```Bash
-
-docker compose logs container-name
-```
-
-# Acknowledgments
-
-  - Inspired by [ezarr](https://github.com/Luctia/ezarr)
-  - [TRaSH Guides](https://trash-guides.info/) for best practices
-  - The *arr community for excellent documentation
+Built on concepts from [ezarr](https://github.com/Luctia/ezarr) with focus on user experience and guided setup.

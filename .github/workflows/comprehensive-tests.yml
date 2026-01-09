@@ -1,0 +1,1106 @@
+name: Comprehensive Testing & Validation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      run_integration_tests:
+        description: "Run full integration tests"
+        required: false
+        default: true
+        type: boolean
+      test_timeout:
+        description: "Test timeout in minutes"
+        required: false
+        default: "30"
+        type: string
+
+env:
+  PYTHON_VERSION: "3.8"
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  system-validation:
+    name: System Prerequisites Validation
+    runs-on: ubuntu-latest
+    outputs:
+      docker-ok: ${{ steps.docker-check.outputs.docker-ok }}
+      compose-ok: ${{ steps.compose-check.outputs.compose-ok }}
+      permissions-ok: ${{ steps.permissions-check.outputs.permissions-ok }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML
+
+      - name: Validate Docker installation
+        id: docker-check
+        run: |
+          echo "=== Docker Version Check ==="
+          docker --version || (echo "Docker not available" && exit 1)
+          docker info || (echo "Docker daemon not accessible" && exit 1)
+          echo "docker-ok=true" >> $GITHUB_OUTPUT
+
+      - name: Validate Docker Compose
+        id: compose-check
+        run: |
+          echo "=== Docker Compose Check ==="
+          docker compose version || (echo "Docker Compose not available" && exit 1)
+          echo "compose-ok=true" >> $GITHUB_OUTPUT
+
+      - name: Check Docker permissions
+        id: permissions-check
+        run: |
+          echo "=== Docker Permissions Check ==="
+          docker ps || (echo "Cannot run docker without sudo" && exit 1)
+          echo "permissions-ok=true" >> $GITHUB_OUTPUT
+
+      - name: Test system validator
+        run: |
+          cd tests && python -c "
+          import sys
+          sys.path.insert(0, '../src')
+          from system_validators import SystemValidator
+
+          validator = SystemValidator()
+          result = validator.validate_all()
+          print(f'System validation result: {result}')
+          assert result == True, 'System validation failed'
+          "
+
+      - name: Validate network requirements
+        run: |
+          echo "=== Network Requirements Check ==="
+          # Check if required ports are available
+          python3 -c "
+          import socket
+          import sys
+
+          required_ports = [8080, 8096, 8989, 7878, 9696, 6767, 8888]
+          unavailable_ports = []
+
+          for port in required_ports:
+              try:
+                  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                      s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                      s.bind(('localhost', port))
+                      print(f'✓ Port {port} available')
+              except OSError:
+                  unavailable_ports.append(port)
+                  print(f'⚠ Port {port} in use')
+
+          if unavailable_ports:
+              print(f'Ports in use: {unavailable_ports}')
+              print('This may cause issues in integration tests')
+          "
+
+  docker-environment-validation:
+    name: Docker Environment Validation
+    runs-on: ubuntu-latest
+    needs: system-validation
+    if: needs.system-validation.outputs.docker-ok == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML
+
+      - name: Test Docker environment variables
+        run: |
+          echo "=== Environment Variables Test ==="
+          python3 -c "
+          import os
+          import sys
+          sys.path.insert(0, 'src')
+
+          from utils import get_timezone, generate_encryption_key
+
+          # Test timezone detection
+          tz = get_timezone()
+          print(f'✓ Detected timezone: {tz}')
+
+          # Test encryption key generation
+          key = generate_encryption_key()
+          print(f'✓ Generated encryption key: {len(key)} characters')
+
+          # Test UID/GID detection
+          uid = os.getuid()
+          gid = os.getgid()
+          print(f'✓ UID/GID: {uid}/{gid}')
+
+          # Test environment validation
+          test_env = {
+              'TZ': tz,
+              'PUID': str(uid),
+              'PGID': str(gid),
+              'SECRET_ENCRYPTION_KEY': key
+          }
+
+          for key, value in test_env.items():
+              assert value, f'Environment variable {key} is empty'
+
+          print('✓ All environment variables valid')
+          "
+
+      - name: Validate Docker Compose generation
+        run: |
+          echo "=== Docker Compose Generation Test ==="
+          python3 -c "
+          import sys
+          import tempfile
+          from pathlib import Path
+          sys.path.insert(0, 'src')
+
+          from template_loader import TemplateLoader
+          from compose_generator import ComposeGenerator
+
+          # Create test directories
+          with tempfile.TemporaryDirectory() as temp_dir:
+              temp_path = Path(temp_dir)
+              docker_dir = temp_path / 'docker'
+              media_dir = temp_path / 'media'
+              docker_dir.mkdir()
+              media_dir.mkdir()
+
+              # Load templates and generate compose
+              loader = TemplateLoader()
+              generator = ComposeGenerator(loader)
+
+              test_services = ['jellyfin', 'qbittorrent', 'sonarr']
+              compose_content = generator.generate(
+                  selected_services=test_services,
+                  uid=1000,
+                  gid=1000,
+                  docker_dir=docker_dir,
+                  media_dir=media_dir,
+                  timezone='UTC'
+              )
+
+              # Validate generated content
+              assert 'jellyfin:' in compose_content
+              assert 'qbittorrent:' in compose_content
+              assert 'sonarr:' in compose_content
+              assert 'networks:' in compose_content
+              assert 'media-network:' in compose_content
+
+              print('✓ Docker Compose generation successful')
+              print(f'Generated compose file length: {len(compose_content)} characters')
+          "
+
+      - name: Test volume mount validation
+        run: |
+          echo "=== Volume Mount Validation ==="
+          python3 -c "
+          import tempfile
+          import os
+          from pathlib import Path
+
+          # Test directory creation and permissions
+          with tempfile.TemporaryDirectory() as temp_dir:
+              temp_path = Path(temp_dir)
+
+              # Test Docker directory structure
+              docker_dir = temp_path / 'docker'
+              docker_dir.mkdir(mode=0o755)
+
+              test_services = ['jellyfin', 'qbittorrent', 'sonarr']
+              for service in test_services:
+                  service_dir = docker_dir / service / 'config'
+                  service_dir.mkdir(parents=True, mode=0o755)
+
+                  # Test write permissions
+                  test_file = service_dir / 'test.txt'
+                  test_file.write_text('test')
+                  assert test_file.exists()
+                  test_file.unlink()
+
+              # Test media directory structure
+              media_dir = temp_path / 'media'
+              media_dir.mkdir(mode=0o755)
+
+              media_subdirs = ['movies', 'tv', 'music', 'downloads']
+              for subdir in media_subdirs:
+                  sub_path = media_dir / subdir
+                  sub_path.mkdir(mode=0o755)
+
+                  # Test write permissions
+                  test_file = sub_path / 'test.txt'
+                  test_file.write_text('test')
+                  assert test_file.exists()
+                  test_file.unlink()
+
+              print('✓ Volume mount validation successful')
+          "
+
+  gluetun-vpn-validation:
+    name: Gluetun VPN Configuration Validation
+    runs-on: ubuntu-latest
+    needs: system-validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML
+
+      - name: Test VPN configuration validation
+        run: |
+          echo "=== VPN Configuration Test ==="
+          python3 -c "
+          import sys
+          sys.path.insert(0, 'src')
+
+          from vpn_config import GluetunConfigurator
+          from utils import validate_subnet_format
+
+          # Test VPN configurator
+          configurator = GluetunConfigurator()
+
+          # Test subnet validation
+          assert validate_subnet_format('192.168.1.0/24') == True
+          assert validate_subnet_format('172.17.0.0/16') == True
+          assert validate_subnet_format('10.0.0.0/8') == True
+          assert validate_subnet_format('invalid') == False
+          print('✓ Subnet validation working')
+
+          # Test VPN providers
+          providers = configurator.get_supported_providers()
+          assert len(providers) > 0
+          print(f'✓ Supported VPN providers: {len(providers)}')
+
+          # Test configuration generation
+          configurator.provider = 'nordvpn'
+          configurator.vpn_type = 'openvpn'
+          configurator.enabled = True
+          configurator.credentials = {'OPENVPN_USER': 'test', 'OPENVPN_PASSWORD': 'test'}
+
+          env_vars = configurator.get_environment_vars()
+          assert 'VPN_SERVICE_PROVIDER' in env_vars
+          print('✓ VPN environment generation working')
+          "
+
+      - name: Test Gluetun Docker configuration
+        run: |
+          echo "=== Gluetun Docker Config Test ==="
+          python3 -c "
+          import sys
+          import tempfile
+          from pathlib import Path
+          sys.path.insert(0, 'src')
+
+          from template_loader import TemplateLoader
+          from compose_generator import ComposeGenerator
+          from vpn_config import GluetunConfigurator
+
+          # Create VPN config
+          gluetun_config = GluetunConfigurator()
+          gluetun_config.enabled = True
+          gluetun_config.provider = 'nordvpn'
+          gluetun_config.vpn_type = 'openvpn'
+          gluetun_config.route_qbittorrent = True
+          gluetun_config.credentials = {'OPENVPN_USER': 'test', 'OPENVPN_PASSWORD': 'test'}
+          gluetun_config.docker_subnet = '172.17.0.0/16'
+
+          # Generate compose with VPN
+          with tempfile.TemporaryDirectory() as temp_dir:
+              temp_path = Path(temp_dir)
+              docker_dir = temp_path / 'docker'
+              media_dir = temp_path / 'media'
+              docker_dir.mkdir()
+              media_dir.mkdir()
+
+              loader = TemplateLoader()
+              generator = ComposeGenerator(loader)
+
+              compose_content = generator.generate(
+                  selected_services=['gluetun', 'qbittorrent'],
+                  uid=1000,
+                  gid=1000,
+                  docker_dir=docker_dir,
+                  media_dir=media_dir,
+                  timezone='UTC',
+                  gluetun_config=gluetun_config
+              )
+
+              # Validate Gluetun configuration
+              assert 'gluetun:' in compose_content
+              assert 'cap_add:' in compose_content
+              assert 'NET_ADMIN' in compose_content
+              assert '/dev/net/tun' in compose_content
+              assert 'network_mode: service:gluetun' in compose_content
+
+              print('✓ Gluetun Docker configuration valid')
+          "
+
+  port-accessibility-tests:
+    name: Port Accessibility Tests
+    runs-on: ubuntu-latest
+    needs: system-validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML
+
+      - name: Test port accessibility functions
+        run: |
+          echo "=== Port Accessibility Tests ==="
+          python3 -c "
+          import sys
+          import socket
+          import threading
+          import time
+          sys.path.insert(0, 'src')
+
+          from system_validators import ServiceTester
+
+          # Start a test server
+          def start_test_server(port):
+              try:
+                  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                      s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                      s.bind(('localhost', port))
+                      s.listen(1)
+                      conn, addr = s.accept()
+                      with conn:
+                          conn.recv(1024)
+                          conn.send(b'HTTP/1.1 200 OK\\r\\n\\r\\n')
+              except:
+                  pass
+
+          # Test port accessibility
+          test_port = 18080
+          server_thread = threading.Thread(target=start_test_server, args=(test_port,))
+          server_thread.daemon = True
+          server_thread.start()
+          time.sleep(0.5)
+
+          success, message = ServiceTester.test_service_connectivity('test', 'localhost', test_port)
+          print(f'Port test result: {success} - {message}')
+          assert success, 'Port accessibility test failed'
+
+          print('✓ Port accessibility tests working')
+          "
+
+      - name: Test service port configuration
+        run: |
+          echo "=== Service Port Configuration Test ==="
+          python3 -c "
+          import sys
+          sys.path.insert(0, 'src')
+
+          from template_loader import TemplateLoader
+
+          loader = TemplateLoader()
+          services = loader.get_services()
+
+          # Validate all services have proper port configuration
+          port_conflicts = {}
+          used_ports = set()
+
+          for service_id, service in services.items():
+              main_port = service.get('port')
+              if main_port:
+                  if main_port in used_ports:
+                      if main_port not in port_conflicts:
+                          port_conflicts[main_port] = []
+                      port_conflicts[main_port].append(service_id)
+                  else:
+                      used_ports.add(main_port)
+
+                  # Check extra ports
+                  for extra_port in service.get('extra_ports', []):
+                      if extra_port in used_ports:
+                          if extra_port not in port_conflicts:
+                              port_conflicts[extra_port] = []
+                          port_conflicts[extra_port].append(service_id)
+                      else:
+                          used_ports.add(extra_port)
+
+          if port_conflicts:
+              print('⚠ Port conflicts detected:')
+              for port, services in port_conflicts.items():
+                  print(f'  Port {port}: {services}')
+              # Don't fail on conflicts as some services are alternatives
+
+          print(f'✓ Scanned {len(services)} services, {len(used_ports)} unique ports')
+          "
+
+  file-permissions-validation:
+    name: File Permissions Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test file permission scenarios
+        run: |
+          echo "=== File Permission Scenarios Test ==="
+
+          # Test with different user scenarios
+          echo "Current user: $(whoami)"
+          echo "Current UID: $(id -u)"
+          echo "Current GID: $(id -g)"
+
+          # Test directory creation with various permissions
+          TEST_DIR="/tmp/media-server-test"
+          mkdir -p "$TEST_DIR"
+
+          # Test config directory permissions
+          CONFIG_DIR="$TEST_DIR/docker/jellyfin/config"
+          mkdir -p "$CONFIG_DIR"
+          chmod 755 "$CONFIG_DIR"
+
+          # Test write permissions
+          echo "test" > "$CONFIG_DIR/test.txt"
+          if [ -f "$CONFIG_DIR/test.txt" ]; then
+              echo "✓ Config directory writable"
+              rm "$CONFIG_DIR/test.txt"
+          else
+              echo "❌ Config directory not writable"
+              exit 1
+          fi
+
+          # Test media directory permissions
+          MEDIA_DIR="$TEST_DIR/media"
+          mkdir -p "$MEDIA_DIR/movies" "$MEDIA_DIR/tv" "$MEDIA_DIR/downloads"
+          chmod -R 755 "$MEDIA_DIR"
+
+          # Test media write permissions
+          echo "test" > "$MEDIA_DIR/movies/test.txt"
+          if [ -f "$MEDIA_DIR/movies/test.txt" ]; then
+              echo "✓ Media directory writable"
+              rm "$MEDIA_DIR/movies/test.txt"
+          else
+              echo "❌ Media directory not writable"
+              exit 1
+          fi
+
+          # Cleanup
+          rm -rf "$TEST_DIR"
+          echo "✓ File permission tests completed"
+
+      - name: Test Docker volume permission mapping
+        run: |
+          echo "=== Docker Volume Permission Test ==="
+          python3 -c "
+          import os
+          import stat
+          import tempfile
+          from pathlib import Path
+
+          # Test permission scenarios that would occur in Docker
+          with tempfile.TemporaryDirectory() as temp_dir:
+              temp_path = Path(temp_dir)
+
+              # Simulate Docker volume mount scenarios
+              scenarios = [
+                  {'uid': 1000, 'gid': 1000, 'mode': 0o755},
+                  {'uid': 0, 'gid': 0, 'mode': 0o755},     # Root scenario
+                  {'uid': 1000, 'gid': 100, 'mode': 0o775}, # Mixed group
+              ]
+
+              for i, scenario in enumerate(scenarios):
+                  test_dir = temp_path / f'test_{i}'
+                  test_dir.mkdir(mode=scenario['mode'])
+
+                  # Test file creation
+                  test_file = test_dir / 'test.txt'
+                  test_file.write_text('test content')
+
+                  # Check permissions
+                  file_stat = test_file.stat()
+                  print(f'Test {i+1}: File mode {oct(stat.S_IMODE(file_stat.st_mode))}')
+
+                  assert test_file.exists(), f'File creation failed in scenario {i+1}'
+
+              print('✓ Docker volume permission mapping tests passed')
+          "
+
+  integration-health-checks:
+    name: Integration Health Checks
+    runs-on: ubuntu-latest
+    needs: [system-validation, docker-environment-validation]
+    if: ${{ github.event.inputs.run_integration_tests == 'true' || github.event.inputs.run_integration_tests == '' }}
+    timeout-minutes: ${{ fromJSON(github.event.inputs.test_timeout || '30') }}
+
+    services:
+      docker:
+        image: docker:24-dind
+        options: --privileged
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+          pip install PyYAML requests
+
+      - name: Start basic media server stack
+        run: |
+          echo "=== Starting Test Media Server Stack ==="
+
+          # Create test directories
+          sudo mkdir -p /tmp/test-docker/{jellyfin,qbittorrent}/config
+          sudo mkdir -p /tmp/test-media/{movies,tv,downloads}
+          sudo chmod -R 755 /tmp/test-docker /tmp/test-media
+
+          # Create minimal docker-compose.yml for testing
+          cat > docker-compose.test.yml << 'EOF'
+          ---
+          services:
+            jellyfin:
+              image: jellyfin/jellyfin:latest
+              container_name: test-jellyfin
+              restart: "no"
+              environment:
+                - TZ=UTC
+                - PUID=1000
+                - PGID=1000
+              volumes:
+                - /tmp/test-docker/jellyfin/config:/config
+                - /tmp/test-media:/media:ro
+              ports:
+                - "18096:8096"
+              networks:
+                - test-network
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+
+            qbittorrent:
+              image: lscr.io/linuxserver/qbittorrent:latest
+              container_name: test-qbittorrent
+              restart: "no"
+              environment:
+                - TZ=UTC
+                - PUID=1000
+                - PGID=1000
+                - WEBUI_PORT=8080
+              volumes:
+                - /tmp/test-docker/qbittorrent/config:/config
+                - /tmp/test-media/downloads:/downloads
+              ports:
+                - "18080:8080"
+              networks:
+                - test-network
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8080"]
+                interval: 30s
+                timeout: 10s
+                retries: 5
+                start_period: 60s
+
+          networks:
+            test-network:
+              driver: bridge
+          EOF
+
+      - name: Start containers
+        run: |
+          echo "=== Starting containers ==="
+          docker compose -f docker-compose.test.yml up -d
+
+          # Wait for containers to be ready
+          echo "Waiting for containers to start..."
+          sleep 30
+
+          # Check container status
+          docker compose -f docker-compose.test.yml ps
+
+      - name: Run comprehensive health checks
+        run: |
+          echo "=== Running Health Checks ==="
+          python3 -c "
+          import sys
+          import time
+          import requests
+          import socket
+          from pathlib import Path
+          sys.path.insert(0, 'src')
+
+          from health_checker import ServiceHealthChecker
+          from template_loader import TemplateLoader
+
+          # Load service config
+          loader = TemplateLoader()
+          services_config = loader.get_services()
+
+          # Create health checker
+          checker = ServiceHealthChecker(
+              docker_dir=Path('/tmp/test-docker'),
+              media_dir=Path('/tmp/test-media')
+          )
+          checker.load_service_config(services_config)
+
+          # Wait a bit more for services to be fully ready
+          print('Waiting for services to be fully ready...')
+          time.sleep(60)
+
+          # Test basic connectivity first
+          def test_port(host, port, timeout=5):
+              try:
+                  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  sock.settimeout(timeout)
+                  result = sock.connect_ex((host, port))
+                  sock.close()
+                  return result == 0
+              except:
+                  return False
+
+          # Test Jellyfin
+          if test_port('localhost', 18096):
+              print('✓ Jellyfin port accessible')
+              try:
+                  response = requests.get('http://localhost:18096', timeout=10)
+                  print(f'✓ Jellyfin HTTP response: {response.status_code}')
+              except Exception as e:
+                  print(f'⚠ Jellyfin HTTP test: {e}')
+          else:
+              print('❌ Jellyfin port not accessible')
+
+          # Test qBittorrent
+          if test_port('localhost', 18080):
+              print('✓ qBittorrent port accessible')
+              try:
+                  response = requests.get('http://localhost:18080', timeout=10)
+                  print(f'✓ qBittorrent HTTP response: {response.status_code}')
+              except Exception as e:
+                  print(f'⚠ qBittorrent HTTP test: {e}')
+          else:
+              print('❌ qBittorrent port not accessible')
+
+          print('✓ Basic health checks completed')
+          "
+
+      - name: Test file permissions in containers
+        run: |
+          echo "=== Testing Container File Permissions ==="
+
+          # Test Jellyfin file permissions
+          if docker exec test-jellyfin test -w /config; then
+              echo "✓ Jellyfin config directory writable"
+          else
+              echo "❌ Jellyfin config directory not writable"
+          fi
+
+          # Test qBittorrent file permissions
+          if docker exec test-qbittorrent test -w /config; then
+              echo "✓ qBittorrent config directory writable"
+          else
+              echo "❌ qBittorrent config directory not writable"
+          fi
+
+          # Test media directory permissions
+          if docker exec test-jellyfin test -r /media; then
+              echo "✓ Media directory readable in Jellyfin"
+          else
+              echo "❌ Media directory not readable in Jellyfin"
+          fi
+
+      - name: Check container logs for errors
+        if: always()
+        run: |
+          echo "=== Container Logs Analysis ==="
+
+          echo "--- Jellyfin Logs ---"
+          docker logs test-jellyfin --tail 50 | grep -i -E "(error|fatal|exception)" || echo "No errors found"
+
+          echo "--- qBittorrent Logs ---"
+          docker logs test-qbittorrent --tail 50 | grep -i -E "(error|fatal|exception)" || echo "No errors found"
+
+      - name: Cleanup test environment
+        if: always()
+        run: |
+          echo "=== Cleanup ==="
+          docker compose -f docker-compose.test.yml down -v --remove-orphans || true
+          sudo rm -rf /tmp/test-docker /tmp/test-media || true
+
+  security-validation:
+    name: Security Validation
+    runs-on: ubuntu-latest
+    needs: system-validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety semgrep
+
+      - name: Run Bandit security scan
+        continue-on-error: true
+        run: |
+          echo "=== Bandit Security Scan ==="
+          bandit -r src/ -f json -o bandit-report.json
+          bandit -r src/ || true
+
+      - name: Run Safety check
+        continue-on-error: true
+        run: |
+          echo "=== Safety Dependency Check ==="
+          pip install -r tests/requirements.txt
+          safety check --json --output safety-report.json || true
+          safety check || true
+
+      - name: Docker security checks
+        run: |
+          echo "=== Docker Security Validation ==="
+
+          # Check for common Docker security issues
+          python3 -c "
+          import sys
+          sys.path.insert(0, 'src')
+
+          from template_loader import TemplateLoader
+
+          loader = TemplateLoader()
+          services = loader.get_services()
+
+          security_issues = []
+
+          for service_id, service in services.items():
+              # Check for privileged containers
+              if service.get('privileged'):
+                  security_issues.append(f'{service_id}: Running in privileged mode')
+
+              # Check for root user
+              env_vars = service.get('env', [])
+              if 'PUID' not in env_vars:
+                  security_issues.append(f'{service_id}: No PUID specified (may run as root)')
+
+              # Check for bind mounts of sensitive directories
+              volumes = service.get('volumes', {})
+              extra_volumes = service.get('extra_volumes', {})
+              all_volumes = {**volumes, **extra_volumes}
+
+              for host_path, container_path in all_volumes.items():
+                  if host_path in ['/etc', '/var/run/docker.sock', '/']:
+                      security_issues.append(f'{service_id}: Sensitive bind mount {host_path}')
+
+          if security_issues:
+              print('⚠ Security considerations found:')
+              for issue in security_issues:
+                  print(f'  - {issue}')
+              print('Note: Some issues may be intentional for functionality')
+          else:
+              print('✓ No obvious security issues detected')
+          "
+
+      - name: Environment security validation
+        run: |
+          echo "=== Environment Security Check ==="
+          python3 -c "
+          import sys
+          sys.path.insert(0, 'src')
+
+          from utils import generate_encryption_key
+
+          # Test encryption key security
+          key = generate_encryption_key()
+
+          # Check key strength
+          assert len(key) >= 32, 'Encryption key too short'
+
+          # Check key randomness (basic)
+          unique_chars = len(set(key))
+          assert unique_chars >= 16, f'Encryption key not random enough ({unique_chars} unique chars)'
+
+          print(f'✓ Encryption key security OK ({len(key)} chars, {unique_chars} unique)')
+          "
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  comprehensive-summary:
+    name: Comprehensive Validation Summary
+    runs-on: ubuntu-latest
+    needs:
+      - system-validation
+      - docker-environment-validation
+      - gluetun-vpn-validation
+      - port-accessibility-tests
+      - file-permissions-validation
+      - integration-health-checks
+      - security-validation
+    if: always()
+
+    steps:
+      - name: Create validation summary
+        run: |
+          echo "# 🧪 Comprehensive Testing Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Validation Area | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| System Prerequisites | ${{ needs.system-validation.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Environment | ${{ needs.docker-environment-validation.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| VPN Configuration | ${{ needs.gluetun-vpn-validation.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Port Accessibility | ${{ needs.port-accessibility-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| File Permissions | ${{ needs.file-permissions-validation.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Health | ${{ needs.integration-health-checks.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Validation | ${{ needs.security-validation.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Determine overall validation status
+        id: overall-status
+        run: |
+          if [[ "${{ needs.system-validation.result }}" == "success" && \
+                "${{ needs.docker-environment-validation.result }}" == "success" && \
+                "${{ needs.gluetun-vpn-validation.result }}" == "success" && \
+                "${{ needs.port-accessibility-tests.result }}" == "success" && \
+                "${{ needs.file-permissions-validation.result }}" == "success" && \
+                "${{ needs.security-validation.result }}" == "success" ]]; then
+
+            if [[ "${{ needs.integration-health-checks.result }}" == "success" ]]; then
+              echo "status=all-pass" >> $GITHUB_OUTPUT
+              echo "message=🎉 All validations passed successfully!" >> $GITHUB_OUTPUT
+              echo "color=28a745" >> $GITHUB_OUTPUT
+            else
+              echo "status=core-pass" >> $GITHUB_OUTPUT
+              echo "message=✅ Core validations passed, integration tests had issues" >> $GITHUB_OUTPUT
+              echo "color=ffc107" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "status=failures" >> $GITHUB_OUTPUT
+            echo "message=❌ Some validation checks failed" >> $GITHUB_OUTPUT
+            echo "color=dc3545" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create detailed summary
+        run: |
+          echo "## 📋 Validation Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Successful Validations:" >> $GITHUB_STEP_SUMMARY
+
+          success_count=0
+          if [[ "${{ needs.system-validation.result }}" == "success" ]]; then
+            echo "- **System Prerequisites**: Docker & Compose working correctly" >> $GITHUB_STEP_SUMMARY
+            ((success_count++))
+          fi
+
+          if [[ "${{ needs.docker-environment-validation.result }}" == "success" ]]; then
+            echo "- **Docker Environment**: Environment variables, compose generation, volume mounts validated" >> $GITHUB_STEP_SUMMARY
+            ((success_count++))
+          fi
+
+          if [[ "${{ needs.gluetun-vpn-validation.result }}" == "success" ]]; then
+            echo "- **VPN Configuration**: Gluetun setup and routing configuration validated" >> $GITHUB_STEP_SUMMARY
+            ((success_count++))
+          fi
+
+          if [[ "${{ needs.port-accessibility-tests.result }}" == "success" ]]; then
+            echo "- **Port Accessibility**: Service ports and connectivity tested" >> $GITHUB_STEP_SUMMARY
+            ((success_count++))
+          fi
+
+          if [[ "${{ needs.file-permissions-validation.result }}" == "success" ]]; then
+            echo "- **File Permissions**: Directory structure and permission mappings verified" >> $GITHUB_STEP_SUMMARY
+            ((success_count++))
+          fi
+
+          if [[ "${{ needs.integration-health-checks.result }}" == "success" ]]; then
+            echo "- **Integration Health**: End-to-end service deployment and health validation" >> $GITHUB_STEP_SUMMARY
+            ((success_count++))
+          fi
+
+          if [[ "${{ needs.security-validation.result }}" == "success" ]]; then
+            echo "- **Security Validation**: Code security, dependency safety, and Docker security practices" >> $GITHUB_STEP_SUMMARY
+            ((success_count++))
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ❌ Failed Validations:" >> $GITHUB_STEP_SUMMARY
+
+          failure_count=0
+          if [[ "${{ needs.system-validation.result }}" != "success" ]]; then
+            echo "- **System Prerequisites**: ${{ needs.system-validation.result }}" >> $GITHUB_STEP_SUMMARY
+            ((failure_count++))
+          fi
+
+          if [[ "${{ needs.docker-environment-validation.result }}" != "success" ]]; then
+            echo "- **Docker Environment**: ${{ needs.docker-environment-validation.result }}" >> $GITHUB_STEP_SUMMARY
+            ((failure_count++))
+          fi
+
+          if [[ "${{ needs.gluetun-vpn-validation.result }}" != "success" ]]; then
+            echo "- **VPN Configuration**: ${{ needs.gluetun-vpn-validation.result }}" >> $GITHUB_STEP_SUMMARY
+            ((failure_count++))
+          fi
+
+          if [[ "${{ needs.port-accessibility-tests.result }}" != "success" ]]; then
+            echo "- **Port Accessibility**: ${{ needs.port-accessibility-tests.result }}" >> $GITHUB_STEP_SUMMARY
+            ((failure_count++))
+          fi
+
+          if [[ "${{ needs.file-permissions-validation.result }}" != "success" ]]; then
+            echo "- **File Permissions**: ${{ needs.file-permissions-validation.result }}" >> $GITHUB_STEP_SUMMARY
+            ((failure_count++))
+          fi
+
+          if [[ "${{ needs.integration-health-checks.result }}" != "success" ]]; then
+            echo "- **Integration Health**: ${{ needs.integration-health-checks.result }}" >> $GITHUB_STEP_SUMMARY
+            ((failure_count++))
+          fi
+
+          if [[ "${{ needs.security-validation.result }}" != "success" ]]; then
+            echo "- **Security Validation**: ${{ needs.security-validation.result }}" >> $GITHUB_STEP_SUMMARY
+            ((failure_count++))
+          fi
+
+          if [[ $failure_count -eq 0 ]]; then
+            echo "None! 🎉" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Summary Statistics:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Validations**: 7" >> $GITHUB_STEP_SUMMARY
+          echo "- **Successful**: $success_count" >> $GITHUB_STEP_SUMMARY
+          echo "- **Failed**: $failure_count" >> $GITHUB_STEP_SUMMARY
+          echo "- **Success Rate**: $(( success_count * 100 / 7 ))%" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Status**: ${{ steps.overall-status.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create issue on failure
+        if: steps.overall-status.outputs.status == 'failures'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = "🚨 Comprehensive Testing Failed";
+            const body = `
+            ## Comprehensive Testing Failure Report
+
+            **Workflow Run**: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            **Branch**: ${{ github.ref_name }}
+            **Commit**: ${{ github.sha }}
+            **Triggered by**: ${{ github.event_name }}
+
+            ### Failed Validations:
+
+            ${{ needs.system-validation.result != 'success' && '- ❌ System Prerequisites' || '' }}
+            ${{ needs.docker-environment-validation.result != 'success' && '- ❌ Docker Environment' || '' }}
+            ${{ needs.gluetun-vpn-validation.result != 'success' && '- ❌ VPN Configuration' || '' }}
+            ${{ needs.port-accessibility-tests.result != 'success' && '- ❌ Port Accessibility' || '' }}
+            ${{ needs.file-permissions-validation.result != 'success' && '- ❌ File Permissions' || '' }}
+            ${{ needs.integration-health-checks.result != 'success' && '- ❌ Integration Health' || '' }}
+            ${{ needs.security-validation.result != 'success' && '- ❌ Security Validation' || '' }}
+
+            ### Next Steps:
+
+            1. Review the workflow logs for detailed error information
+            2. Check the specific validation that failed
+            3. Verify your local environment matches CI requirements
+            4. Fix any identified issues and re-run the workflow
+
+            ### Testing Coverage:
+
+            This comprehensive testing workflow covers:
+            - ✅ Docker and Docker Compose functionality
+            - ✅ Environment variable configuration
+            - ✅ VPN (Gluetun) setup and routing
+            - ✅ Port accessibility and service connectivity
+            - ✅ File permissions and volume mounts
+            - ✅ End-to-end service health checks
+            - ✅ Security validation and vulnerability scanning
+
+            ---
+            *This issue was automatically created by the Comprehensive Testing workflow.*
+            `;
+
+            // Check if issue already exists
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['ci-failure'],
+              state: 'open'
+            });
+
+            const existingIssue = issues.find(issue => issue.title.includes('Comprehensive Testing Failed'));
+
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['ci-failure', 'testing', 'needs-investigation']
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `🔄 **New failure detected**\n\n${body}`
+              });
+            }

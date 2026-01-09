@@ -17,14 +17,21 @@ services:
     setup_url: null
     setup_steps:
       - "Gluetun was configured during setup and should connect automatically"
+      - "⚠️ IMPORTANT: If qBittorrent is routed through VPN, its web UI is accessible via Gluetun's ports"
       - "Verify VPN connection: docker exec gluetun wget -qO- ifconfig.me"
       - "The IP shown should be your VPN provider's IP, not your home IP"
       - "Check Gluetun logs for connection status: docker logs gluetun"
+      - "Network Configuration:"
+      - "  - Docker network subnet was automatically detected and configured"
+      - "  - If containers can't communicate, check FIREWALL_OUTBOUND_SUBNETS in docker-compose.yml"
+      - "  - Should be set to your Docker network subnet (e.g., 172.17.0.0/16)"
       - "If connection fails, verify your credentials in docker-compose.yml"
       - "Common issues:"
       - "  - Wrong credentials: Double-check username/password or WireGuard keys"
       - "  - Server unavailable: Try a different SERVER_COUNTRIES value"
       - "  - Firewall blocking: Ensure UDP port 1194 (OpenVPN) or 51820 (WireGuard) is open"
+      - "  - Port access issues: When using VPN, access qBittorrent via Gluetun's IP/ports"
+      - "For manual network troubleshooting: docker network ls && docker network inspect media-network"
       - "Gluetun Wiki: https://github.com/qdm12/gluetun-wiki"
 
   jellyfin:
@@ -138,19 +145,19 @@ services:
       - TZ
     setup_url: http://{host_ip}:8989
     setup_steps:
-      - "Open http://{host_ip}:7878 in your browser"
+      - "Open http://{host_ip}:8989 in your browser"
       - "Go to Settings → Media Management (left sidebar)"
       - "Scroll down to Root Folders and click 'Add Root Folder'"
-      - "Enter /movies and click OK"
-      - "Toggle 'Rename Movies' to ON for organized file naming"
+      - "Enter /tv and click OK"
+      - "Toggle 'Rename Episodes' to ON for organized file naming"
       - "Go to Settings → Download Clients"
       - "Click the '+' button to add a download client"
       - "Select 'qBittorrent' from the list"
       - "Configure: Host: {qbittorrent_host} | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
-      - "Set Category to 'radarr' (create this category in qBittorrent first)"
+      - "Set Category to 'sonarr' (create this category in qBittorrent first)"
       - "Click Test, then Save"
       - "Go to Settings → General to copy your API Key (needed for Prowlarr and Seerr)"
-      - "To add movies: Movies → Add New → Search for a movie → Select quality profile → Add"
+      - "To add TV shows: Series → Add New → Search for a show → Select quality profile → Add"
 
   radarr:
     name: Radarr
@@ -177,7 +184,7 @@ services:
       - "Go to Settings → Download Clients"
       - "Click the '+' button to add a download client"
       - "Select 'qBittorrent' from the list"
-      - "Configure: Host: qbittorrent | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
+      - "Configure: Host: {qbittorrent_host} | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
       - "Set Category to 'radarr' (create this category in qBittorrent first)"
       - "Click Test, then Save"
       - "Go to Settings → General to copy your API Key (needed for Prowlarr and Seerr)"
@@ -208,7 +215,7 @@ services:
       - "Go to Settings → Download Clients"
       - "Click the '+' button to add a download client"
       - "Select 'qBittorrent' from the list"
-      - "Configure: Host: qbittorrent | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
+      - "Configure: Host: {qbittorrent_host} | Port: 8080 | Username: admin | Password: (check qBittorrent container logs for initial password)"
       - "Set Category to 'Lidarr' (create this category in qBittorrent first)"
       - "Click Test, then Save"
       - "Go to Settings → General to copy your API Key (needed for Prowlarr and Seerr)"
@@ -316,6 +323,7 @@ services:
     setup_url: http://{host_ip}:8080
     setup_steps:
       - "Open http://{host_ip}:8080 in your browser"
+      - "⚠️ NOTE: If using VPN, qBittorrent web UI is accessible through Gluetun container ports"
       - "⚠️ IMPORTANT: The default password is randomly generated. Run: docker logs qbittorrent | grep password"
       - "Login with Username: admin and the password from the logs"
       - "IMMEDIATELY change password: Tools → Options → Web UI → Authentication section"
@@ -328,6 +336,7 @@ services:
       - "Leave 'Save path' as default for each category"
       - "(Optional) Set seeding limits: Tools → Options → BitTorrent → Set ratio limit (e.g., 1.0)"
       - "Verify listening port: Tools → Options → Connection → Listening Port should be 6881"
+      - "⚠️ VPN Users: Connection tests in *arr apps should use host '{qbittorrent_host}' not 'localhost'"
 
   bazarr:
     name: Bazarr
