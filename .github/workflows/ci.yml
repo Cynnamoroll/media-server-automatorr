@@ -40,7 +40,7 @@ jobs:
         id: validation
         run: |
           cd ${{ github.workspace }}
-          python scripts/validate-pipeline.py
+          python scripts/validate-pipeline.py --verbose
           echo "status=success" >> $GITHUB_OUTPUT
 
   lint:
