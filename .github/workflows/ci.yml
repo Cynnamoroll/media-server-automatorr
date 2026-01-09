@@ -40,7 +40,7 @@ jobs:
         id: validation
         run: |
           cd ${{ github.workspace }}
-          python scripts/validate-pipeline.py --skip-integration
+          python scripts/validate-pipeline.py
           echo "status=success" >> $GITHUB_OUTPUT
 
   lint:
