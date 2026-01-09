@@ -32,9 +32,14 @@ jobs:
           pip install -r tests/requirements.txt
           pip install PyYAML requests
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Run enhanced validation
         id: validation
         run: |
+          cd ${{ github.workspace }}
           python scripts/validate-pipeline.py --skip-integration
           echo "status=success" >> $GITHUB_OUTPUT
 
@@ -64,6 +69,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r tests/requirements.txt
+
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
 
       - name: Check code formatting with Black
         run: black --check --diff src/ tests/
@@ -117,11 +126,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl wget
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r tests/requirements.txt
           pip install PyYAML  # Main application dependency
+
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
 
       - name: Run unit tests
         run: |
@@ -164,6 +177,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tests/requirements.txt
           pip install PyYAML
+
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
 
       - name: Check Docker installation
         run: |
@@ -208,6 +225,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install bandit safety
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Run Bandit security scan
         run: bandit -r src/ -f json -o bandit-report.json || true
 
@@ -244,19 +265,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install PyYAML
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Test script import and basic functionality
         run: |
           cd ${{ github.workspace }}
           python3 -c "
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          # Test imports
-          from src.setup_core import MediaServerSetup
-          from src.system_validators import SystemValidator, ContainerTester
-          from src.directory_manager import DirectoryManager
-          from src.user_interface import ServiceSelector, UserConfigCollector
-          from src.file_generator import FileGenerator
+          # Test imports using package structure
+          import src.setup_core
+          import src.system_validators
+          import src.directory_manager
+          import src.user_interface
+          import src.file_generator
+
+          # Get classes from modules
+          MediaServerSetup = src.setup_core.MediaServerSetup
+          SystemValidator = src.system_validators.SystemValidator
 
           print('✓ All imports successful')
 
@@ -273,9 +302,10 @@ jobs:
           cd ${{ github.workspace }}
           python3 -c "
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from src.template_loader import TemplateLoader
+          import src.template_loader
+          TemplateLoader = src.template_loader.TemplateLoader
 
           loader = TemplateLoader()
 
@@ -300,29 +330,24 @@ jobs:
           cd ${{ github.workspace }}
           python3 -c "
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from src.utils import (
-              generate_encryption_key,
-              get_timezone,
-              validate_subnet_format,
-              replace_placeholders
-          )
+          import src.utils
 
           # Test utility functions
-          key = generate_encryption_key()
+          key = src.utils.generate_encryption_key()
           assert len(key) == 32, 'Encryption key should be 32 characters'
           print('✓ Encryption key generation works')
 
-          tz = get_timezone()
+          tz = src.utils.get_timezone()
           assert isinstance(tz, str), 'Timezone should be string'
           print(f'✓ Timezone detection works: {tz}')
 
-          assert validate_subnet_format('192.168.1.0/24') == True
-          assert validate_subnet_format('invalid') == False
+          assert src.utils.validate_subnet_format('192.168.1.0/24') == True
+          assert src.utils.validate_subnet_format('invalid') == False
           print('✓ Subnet validation works')
 
-          result = replace_placeholders('Hello {name}', {'name': 'World'})
+          result = src.utils.replace_placeholders('Hello {name}', {'name': 'World'})
           assert result == 'Hello World'
           print('✓ Placeholder replacement works')
 
@@ -348,6 +373,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r tests/requirements.txt
+
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
 
       - name: Run full test suite with coverage
         run: |
@@ -382,6 +411,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Validate project structure
         run: |
           # Check required files exist
@@ -405,6 +438,10 @@ jobs:
         run: |
           python3 -c "
           import yaml
+
+          # Change to project root
+          import os
+          os.chdir('${{ github.workspace }}')
 
           # Validate docker-services.yaml
           with open('templates/docker-services.yaml', 'r') as f:

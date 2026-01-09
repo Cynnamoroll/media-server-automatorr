@@ -47,6 +47,10 @@ jobs:
           pip install -r tests/requirements.txt
           pip install PyYAML
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Validate Docker installation
         id: docker-check
         run: |
@@ -71,12 +75,12 @@ jobs:
 
       - name: Test system validator
         run: |
-          cd tests && python -c "
+          python -c "
           import sys
-          sys.path.insert(0, '../src')
-          from system_validators import SystemValidator
+          sys.path.insert(0, '.')
+          import src.system_validators
 
-          validator = SystemValidator()
+          validator = src.system_validators.SystemValidator()
           result = validator.validate_all()
           print(f'System validation result: {result}')
           assert result == True, 'System validation failed'
@@ -135,16 +139,16 @@ jobs:
           python3 -c "
           import os
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from utils import get_timezone, generate_encryption_key
+          import src.utils
 
           # Test timezone detection
-          tz = get_timezone()
+          tz = src.utils.get_timezone()
           print(f'✓ Detected timezone: {tz}')
 
           # Test encryption key generation
-          key = generate_encryption_key()
+          key = src.utils.generate_encryption_key()
           print(f'✓ Generated encryption key: {len(key)} characters')
 
           # Test UID/GID detection
@@ -173,10 +177,13 @@ jobs:
           import sys
           import tempfile
           from pathlib import Path
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from template_loader import TemplateLoader
-          from compose_generator import ComposeGenerator
+          import src.template_loader
+          import src.compose_generator
+
+          TemplateLoader = src.template_loader.TemplateLoader
+          ComposeGenerator = src.compose_generator.ComposeGenerator
 
           # Create test directories
           with tempfile.TemporaryDirectory() as temp_dir:
@@ -276,15 +283,22 @@ jobs:
           pip install -r tests/requirements.txt
           pip install PyYAML
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Test VPN configuration validation
         run: |
           echo "=== VPN Configuration Test ==="
           python3 -c "
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from vpn_config import GluetunConfigurator
-          from utils import validate_subnet_format
+          import src.vpn_config
+          import src.utils
+
+          GluetunConfigurator = src.vpn_config.GluetunConfigurator
+          validate_subnet_format = src.utils.validate_subnet_format
 
           # Test VPN configurator
           configurator = GluetunConfigurator()
@@ -319,11 +333,15 @@ jobs:
           import sys
           import tempfile
           from pathlib import Path
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from template_loader import TemplateLoader
-          from compose_generator import ComposeGenerator
-          from vpn_config import GluetunConfigurator
+          import src.template_loader
+          import src.compose_generator
+          import src.vpn_config
+
+          TemplateLoader = src.template_loader.TemplateLoader
+          ComposeGenerator = src.compose_generator.ComposeGenerator
+          GluetunConfigurator = src.vpn_config.GluetunConfigurator
 
           # Create VPN config
           gluetun_config = GluetunConfigurator()
@@ -393,9 +411,10 @@ jobs:
           import socket
           import threading
           import time
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from system_validators import ServiceTester
+          import src.system_validators
+          ServiceTester = src.system_validators.ServiceTester
 
           # Start a test server
           def start_test_server(port):
@@ -430,9 +449,10 @@ jobs:
           echo "=== Service Port Configuration Test ==="
           python3 -c "
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from template_loader import TemplateLoader
+          import src.template_loader
+          TemplateLoader = src.template_loader.TemplateLoader
 
           loader = TemplateLoader()
           services = loader.get_services()
@@ -591,6 +611,10 @@ jobs:
           pip install -r tests/requirements.txt
           pip install PyYAML requests
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Start basic media server stack
         run: |
           echo "=== Starting Test Media Server Stack ==="
@@ -675,10 +699,12 @@ jobs:
           import requests
           import socket
           from pathlib import Path
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from health_checker import ServiceHealthChecker
-          from template_loader import TemplateLoader
+          import src.health_checker
+          import src.template_loader
+          ServiceHealthChecker = src.health_checker.ServiceHealthChecker
+          TemplateLoader = src.template_loader.TemplateLoader
 
           # Load service config
           loader = TemplateLoader()
@@ -793,6 +819,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install bandit safety semgrep
 
+      - name: Set up Python path
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/src" >> $GITHUB_ENV
+
       - name: Run Bandit security scan
         continue-on-error: true
         run: |
@@ -815,9 +845,10 @@ jobs:
           # Check for common Docker security issues
           python3 -c "
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from template_loader import TemplateLoader
+          import src.template_loader
+          TemplateLoader = src.template_loader.TemplateLoader
 
           loader = TemplateLoader()
           services = loader.get_services()
@@ -857,9 +888,10 @@ jobs:
           echo "=== Environment Security Check ==="
           python3 -c "
           import sys
-          sys.path.insert(0, 'src')
+          sys.path.insert(0, '.')
 
-          from utils import generate_encryption_key
+          import src.utils
+          generate_encryption_key = src.utils.generate_encryption_key
 
           # Test encryption key security
           key = generate_encryption_key()
