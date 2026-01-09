@@ -1064,6 +1064,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Overall Status**: ${{ steps.overall-status.outputs.message }}" >> $GITHUB_STEP_SUMMARY
 
+      - name: Fail job if validations failed
+        if: steps.overall-status.outputs.status == 'failures'
+        run: |
+          echo "❌ Comprehensive validation failed - one or more validation checks did not pass"
+          echo "Check the summary above for details on which validations failed"
+          exit 1
+
       - name: Create issue on failure
         if: steps.overall-status.outputs.status == 'failures'
         uses: actions/github-script@v6
