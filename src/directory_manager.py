@@ -274,9 +274,9 @@ class DirectoryManager:
                 "owner_uid": stat_info.st_uid,
                 "owner_gid": stat_info.st_gid,
                 "permissions": oct(stat_info.st_mode)[-3:],
-                "file_count": len(list(directory.rglob("*")))
-                if directory.is_dir()
-                else 0,
+                "file_count": (
+                    len(list(directory.rglob("*"))) if directory.is_dir() else 0
+                ),
             }
         except Exception as e:
             return {"exists": True, "error": str(e)}

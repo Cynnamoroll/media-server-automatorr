@@ -382,9 +382,9 @@ class MediaServerSetup:
         # Sort services by setup priority
         sorted_services = sorted(
             self.selected_services,
-            key=lambda x: SETUP_ORDER_PRIORITY.index(x)
-            if x in SETUP_ORDER_PRIORITY
-            else 999,
+            key=lambda x: (
+                SETUP_ORDER_PRIORITY.index(x) if x in SETUP_ORDER_PRIORITY else 999
+            ),
         )
 
         for i, service_id in enumerate(sorted_services, 1):

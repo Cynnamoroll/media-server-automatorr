@@ -146,10 +146,9 @@ def mock_docker_commands(mock_subprocess):
 @pytest.fixture
 def mock_os_operations():
     """Mock OS operations like getuid, geteuid, etc."""
-    with patch("os.getuid", return_value=1000), \
-         patch("os.getgid", return_value=1000), \
-         patch("os.geteuid", return_value=1000), \
-         patch("os.getenv") as mock_getenv:
+    with patch("os.getuid", return_value=1000), patch(
+        "os.getgid", return_value=1000
+    ), patch("os.geteuid", return_value=1000), patch("os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda key, default=None: {
             "USER": "testuser",
             "SSH_CLIENT": None,
@@ -162,9 +161,9 @@ def mock_os_operations():
 @pytest.fixture
 def mock_network_operations():
     """Mock network operations for testing."""
-    with patch("socket.socket") as mock_socket, \
-         patch("src.utils.get_local_network_ip", return_value="192.168.1.100"), \
-         patch("src.utils.get_docker_network_subnet", return_value="172.17.0.0/16"):
+    with patch("socket.socket") as mock_socket, patch(
+        "src.utils.get_local_network_ip", return_value="192.168.1.100"
+    ), patch("src.utils.get_docker_network_subnet", return_value="172.17.0.0/16"):
         # Mock socket for connectivity tests
         mock_socket_instance = MagicMock()
         mock_socket_instance.connect_ex.return_value = 0
@@ -181,7 +180,8 @@ def templates_dir(temp_dir: Path) -> Path:
 
     # Create docker-services.yaml
     services_yaml = templates_dir / "docker-services.yaml"
-    services_yaml.write_text("""
+    services_yaml.write_text(
+        """
 categories:
   media_servers: "Media Servers"
   download_clients: "Download Clients"
@@ -205,7 +205,8 @@ services:
     setup_steps:
       - "Open web interface"
       - "Complete setup wizard"
-""")
+"""
+    )
 
     # Create template files
     header_template = templates_dir / "setup-guide-header.md"

@@ -54,7 +54,7 @@ class ServiceHealthChecker:
             "file_permissions": {},
             "environment_validation": {},
             "vpn_status": {},
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
 
         # 1. Basic Docker health
@@ -66,13 +66,17 @@ class ServiceHealthChecker:
             results["services"][service] = self._check_service_health(service)
 
         # 3. Network connectivity matrix
-        results["network_connectivity"] = self._check_network_connectivity(selected_services)
+        results["network_connectivity"] = self._check_network_connectivity(
+            selected_services
+        )
 
         # 4. File permissions and volume mounts
         results["file_permissions"] = self._check_file_permissions(selected_services)
 
         # 5. Environment variable validation
-        results["environment_validation"] = self._check_environment_variables(selected_services)
+        results["environment_validation"] = self._check_environment_variables(
+            selected_services
+        )
 
         # 6. VPN-specific checks if Gluetun is present
         if "gluetun" in selected_services:
@@ -94,7 +98,7 @@ class ServiceHealthChecker:
             "disk_space": {},
             "memory_usage": {},
             "network_status": {},
-            "issues": []
+            "issues": [],
         }
 
         try:
@@ -118,9 +122,13 @@ class ServiceHealthChecker:
             # Check networks
             result = run_command(["docker", "network", "ls"], check=False)
             if result.returncode == 0:
-                networks = [line.split()[1] for line in result.stdout.strip().split('\n')[1:]]
+                networks = [
+                    line.split()[1] for line in result.stdout.strip().split("\n")[1:]
+                ]
                 health["network_status"]["available_networks"] = networks
-                health["network_status"]["media_network_exists"] = "media-network" in networks
+                health["network_status"]["media_network_exists"] = (
+                    "media-network" in networks
+                )
 
         except Exception as e:
             health["issues"].append(f"Docker health check failed: {str(e)}")
@@ -137,7 +145,7 @@ class ServiceHealthChecker:
             "logs_healthy": True,
             "resource_usage": {},
             "issues": [],
-            "warnings": []
+            "warnings": [],
         }
 
         try:
@@ -149,17 +157,23 @@ class ServiceHealthChecker:
                 return health
 
             # Check container health status
-            health["container_healthy"] = self._check_container_health_status(service_name)
+            health["container_healthy"] = self._check_container_health_status(
+                service_name
+            )
 
             # Get service config
             service_config = self.services_config.get(service_name, {})
 
             # Check port accessibility
-            health["ports_accessible"] = self._check_service_ports(service_name, service_config)
+            health["ports_accessible"] = self._check_service_ports(
+                service_name, service_config
+            )
 
             # Check web UI if service has one
             if "setup_url" in service_config and service_config["setup_url"]:
-                health["web_ui_responsive"] = self._check_web_ui_health(service_name, service_config)
+                health["web_ui_responsive"] = self._check_web_ui_health(
+                    service_name, service_config
+                )
 
             # Analyze container logs for issues
             log_analysis = self._analyze_container_logs(service_name)
@@ -181,7 +195,7 @@ class ServiceHealthChecker:
             "inter_service_communication": {},
             "external_connectivity": {},
             "docker_network_health": {},
-            "issues": []
+            "issues": [],
         }
 
         try:
@@ -193,21 +207,31 @@ class ServiceHealthChecker:
                 connectivity["inter_service_communication"][service_a] = {}
 
                 for service_b in services:
-                    if service_a == service_b or not self._is_container_running(service_b):
+                    if service_a == service_b or not self._is_container_running(
+                        service_b
+                    ):
                         continue
 
-                    can_communicate = self._test_inter_service_communication(service_a, service_b)
-                    connectivity["inter_service_communication"][service_a][service_b] = can_communicate
+                    can_communicate = self._test_inter_service_communication(
+                        service_a, service_b
+                    )
+                    connectivity["inter_service_communication"][service_a][
+                        service_b
+                    ] = can_communicate
 
             # Test external connectivity (for VPN scenarios)
             if "gluetun" in services:
-                connectivity["external_connectivity"] = self._check_external_connectivity_through_vpn()
+                connectivity["external_connectivity"] = (
+                    self._check_external_connectivity_through_vpn()
+                )
 
             # Check Docker network health
             connectivity["docker_network_health"] = self._check_docker_network_health()
 
         except Exception as e:
-            connectivity["issues"].append(f"Network connectivity check failed: {str(e)}")
+            connectivity["issues"].append(
+                f"Network connectivity check failed: {str(e)}"
+            )
 
         return connectivity
 
@@ -217,7 +241,7 @@ class ServiceHealthChecker:
             "volume_mounts": {},
             "permission_issues": [],
             "ownership_correct": {},
-            "writeable_directories": {}
+            "writeable_directories": {},
         }
 
         try:
@@ -231,15 +255,23 @@ class ServiceHealthChecker:
                 permissions["writeable_directories"][service] = {}
 
                 # Check config volumes
-                for container_path, volume_name in service_config.get("volumes", {}).items():
+                for container_path, volume_name in service_config.get(
+                    "volumes", {}
+                ).items():
                     host_path = self.docker_dir / service / volume_name
-                    mount_status = self._check_volume_mount(service, host_path, container_path)
+                    mount_status = self._check_volume_mount(
+                        service, host_path, container_path
+                    )
                     permissions["volume_mounts"][service][container_path] = mount_status
 
                 # Check media volumes
-                for container_path, volume_name in service_config.get("media_volumes", {}).items():
+                for container_path, volume_name in service_config.get(
+                    "media_volumes", {}
+                ).items():
                     host_path = self.media_dir / volume_name
-                    mount_status = self._check_volume_mount(service, host_path, container_path)
+                    mount_status = self._check_volume_mount(
+                        service, host_path, container_path
+                    )
                     permissions["volume_mounts"][service][container_path] = mount_status
 
                 # Test write permissions
@@ -247,7 +279,9 @@ class ServiceHealthChecker:
                 permissions["writeable_directories"][service] = write_test
 
         except Exception as e:
-            permissions["permission_issues"].append(f"Permission check failed: {str(e)}")
+            permissions["permission_issues"].append(
+                f"Permission check failed: {str(e)}"
+            )
 
         return permissions
 
@@ -257,7 +291,7 @@ class ServiceHealthChecker:
             "services": {},
             "missing_variables": {},
             "invalid_values": {},
-            "security_issues": []
+            "security_issues": [],
         }
 
         try:
@@ -282,7 +316,9 @@ class ServiceHealthChecker:
                     env_validation["missing_variables"][service] = missing
 
                 # Validate critical variables have proper values
-                validation_results = self._validate_environment_values(service, actual_env)
+                validation_results = self._validate_environment_values(
+                    service, actual_env
+                )
                 env_validation["services"][service] = validation_results
 
                 # Check for security issues
@@ -291,7 +327,9 @@ class ServiceHealthChecker:
                     env_validation["security_issues"].extend(security_issues)
 
         except Exception as e:
-            env_validation["security_issues"].append(f"Environment validation failed: {str(e)}")
+            env_validation["security_issues"].append(
+                f"Environment validation failed: {str(e)}"
+            )
 
         return env_validation
 
@@ -306,7 +344,7 @@ class ServiceHealthChecker:
             "external_ip": None,
             "local_ip": None,
             "leak_test_results": {},
-            "issues": []
+            "issues": [],
         }
 
         try:
@@ -339,10 +377,17 @@ class ServiceHealthChecker:
     def _is_container_running(self, container_name: str) -> bool:
         """Check if a container is running."""
         try:
-            result = run_command([
-                "docker", "ps", "--filter", f"name=^{container_name}$",
-                "--format", "{{.Names}}"
-            ], check=False)
+            result = run_command(
+                [
+                    "docker",
+                    "ps",
+                    "--filter",
+                    f"name=^{container_name}$",
+                    "--format",
+                    "{{.Names}}",
+                ],
+                check=False,
+            )
             return container_name in result.stdout
         except:
             return False
@@ -350,34 +395,51 @@ class ServiceHealthChecker:
     def _check_container_health_status(self, container_name: str) -> bool:
         """Check Docker health status of container."""
         try:
-            result = run_command([
-                "docker", "inspect", container_name,
-                "--format", "{{.State.Health.Status}}"
-            ], check=False)
+            result = run_command(
+                [
+                    "docker",
+                    "inspect",
+                    container_name,
+                    "--format",
+                    "{{.State.Health.Status}}",
+                ],
+                check=False,
+            )
 
             if result.returncode == 0:
                 health_status = result.stdout.strip()
-                return health_status in ["healthy", ""]  # "" means no healthcheck defined
+                return health_status in [
+                    "healthy",
+                    "",
+                ]  # "" means no healthcheck defined
             return False
         except:
             return False
 
-    def _check_service_ports(self, service_name: str, service_config: Dict[str, Any]) -> Dict[str, bool]:
+    def _check_service_ports(
+        self, service_name: str, service_config: Dict[str, Any]
+    ) -> Dict[str, bool]:
         """Check if service ports are accessible."""
         ports_status = {}
 
         # Check main port
         main_port = service_config.get("port")
         if main_port:
-            ports_status[f"main_{main_port}"] = self._test_port_accessibility("localhost", main_port)
+            ports_status[f"main_{main_port}"] = self._test_port_accessibility(
+                "localhost", main_port
+            )
 
         # Check extra ports
         for port in service_config.get("extra_ports", []):
-            ports_status[f"extra_{port}"] = self._test_port_accessibility("localhost", port)
+            ports_status[f"extra_{port}"] = self._test_port_accessibility(
+                "localhost", port
+            )
 
         return ports_status
 
-    def _check_web_ui_health(self, service_name: str, service_config: Dict[str, Any]) -> bool:
+    def _check_web_ui_health(
+        self, service_name: str, service_config: Dict[str, Any]
+    ) -> bool:
         """Check if web UI is responsive."""
         setup_url = service_config.get("setup_url", "")
         if not setup_url or setup_url == "null":
@@ -395,14 +457,12 @@ class ServiceHealthChecker:
 
     def _analyze_container_logs(self, container_name: str) -> Dict[str, Any]:
         """Analyze container logs for errors and warnings."""
-        analysis = {
-            "healthy": True,
-            "errors": [],
-            "warnings": []
-        }
+        analysis = {"healthy": True, "errors": [], "warnings": []}
 
         try:
-            result = run_command(["docker", "logs", "--tail", "100", container_name], check=False)
+            result = run_command(
+                ["docker", "logs", "--tail", "100", container_name], check=False
+            )
             if result.returncode != 0:
                 return analysis
 
@@ -410,15 +470,20 @@ class ServiceHealthChecker:
 
             # Check for common error patterns
             error_patterns = [
-                "error", "fatal", "exception", "failed", "cannot", "unable",
-                "connection refused", "timeout", "permission denied"
+                "error",
+                "fatal",
+                "exception",
+                "failed",
+                "cannot",
+                "unable",
+                "connection refused",
+                "timeout",
+                "permission denied",
             ]
 
-            warning_patterns = [
-                "warning", "warn", "deprecated", "retry", "fallback"
-            ]
+            warning_patterns = ["warning", "warn", "deprecated", "retry", "fallback"]
 
-            for line in result.stdout.split('\n')[-50:]:  # Check last 50 lines
+            for line in result.stdout.split("\n")[-50:]:  # Check last 50 lines
                 line_lower = line.lower()
                 line_stripped = line.strip()
 
@@ -439,7 +504,9 @@ class ServiceHealthChecker:
                 if not error_found:
                     for pattern in warning_patterns:
                         if pattern in line_lower:
-                            if line_stripped not in analysis["warnings"]:  # Avoid duplicates
+                            if (
+                                line_stripped not in analysis["warnings"]
+                            ):  # Avoid duplicates
                                 analysis["warnings"].append(line_stripped)
                             break
 
@@ -466,19 +533,30 @@ class ServiceHealthChecker:
             "vpn_connected": False,
             "ip_changed": False,
             "external_ip": None,
-            "local_ip": None
+            "local_ip": None,
         }
 
         try:
             # Get local IP
-            local_result = run_command(["curl", "-s", "--max-time", "10", "ifconfig.me"], check=False)
+            local_result = run_command(
+                ["curl", "-s", "--max-time", "10", "ifconfig.me"], check=False
+            )
             if local_result.returncode == 0:
                 result["local_ip"] = local_result.stdout.strip()
 
             # Get VPN IP through Gluetun
-            vpn_result = run_command([
-                "docker", "exec", "gluetun", "wget", "-qO-", "--timeout=10", "ifconfig.me"
-            ], check=False)
+            vpn_result = run_command(
+                [
+                    "docker",
+                    "exec",
+                    "gluetun",
+                    "wget",
+                    "-qO-",
+                    "--timeout=10",
+                    "ifconfig.me",
+                ],
+                check=False,
+            )
 
             if vpn_result.returncode == 0:
                 result["external_ip"] = vpn_result.stdout.strip()
@@ -579,7 +657,9 @@ class ServiceHealthChecker:
         # Implementation for Docker network health
         return {"network_healthy": True}
 
-    def _check_volume_mount(self, service: str, host_path: Path, container_path: str) -> Dict[str, Any]:
+    def _check_volume_mount(
+        self, service: str, host_path: Path, container_path: str
+    ) -> Dict[str, Any]:
         """Check volume mount status."""
         # Implementation for volume mount checking
         return {"mounted": True, "writable": True}
@@ -594,12 +674,16 @@ class ServiceHealthChecker:
         # Implementation for getting container env vars
         return {}
 
-    def _validate_environment_values(self, service: str, env_vars: Dict[str, str]) -> Dict[str, Any]:
+    def _validate_environment_values(
+        self, service: str, env_vars: Dict[str, str]
+    ) -> Dict[str, Any]:
         """Validate environment variable values."""
         # Implementation for env var validation
         return {"valid": True}
 
-    def _check_environment_security(self, service: str, env_vars: Dict[str, str]) -> List[str]:
+    def _check_environment_security(
+        self, service: str, env_vars: Dict[str, str]
+    ) -> List[str]:
         """Check for security issues in environment variables."""
         # Implementation for security checking
         return []
@@ -636,7 +720,7 @@ class ServiceHealthChecker:
             return
 
         try:
-            with open(output_file, 'w') as f:
+            with open(output_file, "w") as f:
                 json.dump(self.health_results, f, indent=2, default=str)
             print_success(f"Health report exported to: {output_file}")
         except Exception as e:
