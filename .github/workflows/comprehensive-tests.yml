@@ -682,18 +682,29 @@ jobs:
       - name: Start containers
         run: |
           echo "=== Starting containers ==="
+          echo "📦 Bringing up Docker Compose stack..."
           docker compose -f docker-compose.test.yml up -d
 
-          # Wait for containers to be ready
-          echo "Waiting for containers to start..."
-          sleep 30
+          echo ""
+          echo "⏳ Waiting for containers to initialize (30 seconds)..."
+          for i in {1..30}; do
+            echo -n "."
+            sleep 1
+          done
+          echo ""
+          echo ""
 
-          # Check container status
+          echo "📊 Container Status:"
           docker compose -f docker-compose.test.yml ps
+
+          echo ""
+          echo "🔍 Checking which containers are running..."
+          docker ps --filter "name=test-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
       - name: Run comprehensive health checks
         run: |
           echo "=== Running Health Checks ==="
+          echo ""
           python3 -c "
           import sys
           import time
@@ -707,20 +718,29 @@ jobs:
           ServiceHealthChecker = src.health_checker.ServiceHealthChecker
           TemplateLoader = src.template_loader.TemplateLoader
 
-          # Load service config
+          print('📋 Loading service configuration...')
           loader = TemplateLoader()
           services_config = loader.get_services()
+          print(f'   ✓ Loaded {len(services_config)} service configurations')
+          print('')
 
-          # Create health checker
+          print('🔧 Initializing health checker...')
           checker = ServiceHealthChecker(
               docker_dir=Path('/tmp/test-docker'),
               media_dir=Path('/tmp/test-media')
           )
           checker.load_service_config(services_config)
+          print('   ✓ Health checker initialized')
+          print('')
 
           # Wait a bit more for services to be fully ready
-          print('Waiting for services to be fully ready...')
-          time.sleep(60)
+          print('⏳ Waiting for services to be fully ready (60 seconds)...')
+          print('   This allows containers to complete their startup routines')
+          for i in range(6):
+              print(f'   ... {(i+1)*10} seconds elapsed')
+              time.sleep(10)
+          print('   ✓ Wait period complete')
+          print('')
 
           # Test basic connectivity first
           def test_port(host, port, timeout=5):
@@ -733,73 +753,126 @@ jobs:
               except:
                   return False
 
+          print('🔌 Testing service connectivity...')
+          print('')
+
           # Test Jellyfin
+          print('Testing Jellyfin (port 18096)...')
           if test_port('localhost', 18096):
-              print('✓ Jellyfin port accessible')
+              print('   ✓ Port 18096 is accessible')
               try:
+                  print('   → Sending HTTP request...')
                   response = requests.get('http://localhost:18096', timeout=10)
-                  print(f'✓ Jellyfin HTTP response: {response.status_code}')
+                  print(f'   ✓ HTTP response received: {response.status_code}')
               except Exception as e:
-                  print(f'⚠ Jellyfin HTTP test: {e}')
+                  print(f'   ⚠ HTTP request failed: {e}')
           else:
-              print('❌ Jellyfin port not accessible')
+              print('   ❌ Port 18096 is not accessible')
+          print('')
 
           # Test qBittorrent
+          print('Testing qBittorrent (port 18080)...')
           if test_port('localhost', 18080):
-              print('✓ qBittorrent port accessible')
+              print('   ✓ Port 18080 is accessible')
               try:
+                  print('   → Sending HTTP request...')
                   response = requests.get('http://localhost:18080', timeout=10)
-                  print(f'✓ qBittorrent HTTP response: {response.status_code}')
+                  print(f'   ✓ HTTP response received: {response.status_code}')
               except Exception as e:
-                  print(f'⚠ qBittorrent HTTP test: {e}')
+                  print(f'   ⚠ HTTP request failed: {e}')
           else:
-              print('❌ qBittorrent port not accessible')
+              print('   ❌ Port 18080 is not accessible')
+          print('')
 
-          print('✓ Basic health checks completed')
+          print('✅ Basic health checks completed successfully')
           "
 
       - name: Test file permissions in containers
         run: |
           echo "=== Testing Container File Permissions ==="
+          echo ""
 
+          echo "📂 Testing Jellyfin permissions..."
           # Test Jellyfin file permissions
           if docker exec test-jellyfin test -w /config; then
-              echo "✓ Jellyfin config directory writable"
+              echo "   ✓ Config directory is writable"
           else
-              echo "❌ Jellyfin config directory not writable"
+              echo "   ❌ Config directory is not writable"
+              exit 1
           fi
 
+          if docker exec test-jellyfin test -r /media; then
+              echo "   ✓ Media directory is readable"
+          else
+              echo "   ❌ Media directory is not readable"
+              exit 1
+          fi
+          echo ""
+
+          echo "📂 Testing qBittorrent permissions..."
           # Test qBittorrent file permissions
           if docker exec test-qbittorrent test -w /config; then
-              echo "✓ qBittorrent config directory writable"
+              echo "   ✓ Config directory is writable"
           else
-              echo "❌ qBittorrent config directory not writable"
+              echo "   ❌ Config directory is not writable"
+              exit 1
           fi
 
-          # Test media directory permissions
-          if docker exec test-jellyfin test -r /media; then
-              echo "✓ Media directory readable in Jellyfin"
+          if docker exec test-qbittorrent test -w /downloads; then
+              echo "   ✓ Downloads directory is writable"
           else
-              echo "❌ Media directory not readable in Jellyfin"
+              echo "   ❌ Downloads directory is not writable"
+              exit 1
           fi
+          echo ""
+
+          echo "✅ All file permission checks passed"
 
       - name: Check container logs for errors
         if: always()
         run: |
           echo "=== Container Logs Analysis ==="
+          echo ""
 
-          echo "--- Jellyfin Logs ---"
-          docker logs test-jellyfin --tail 50 | grep -i -E "(error|fatal|exception)" || echo "No errors found"
+          echo "📋 Analyzing Jellyfin logs (last 50 lines)..."
+          ERROR_COUNT=$(docker logs test-jellyfin --tail 50 2>&1 | grep -i -c -E "(error|fatal|exception)" || true)
+          if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "   ⚠ Found $ERROR_COUNT error(s):"
+              docker logs test-jellyfin --tail 50 2>&1 | grep -i -E "(error|fatal|exception)" || true
+          else
+              echo "   ✓ No errors found in logs"
+          fi
+          echo ""
 
-          echo "--- qBittorrent Logs ---"
-          docker logs test-qbittorrent --tail 50 | grep -i -E "(error|fatal|exception)" || echo "No errors found"
+          echo "📋 Analyzing qBittorrent logs (last 50 lines)..."
+          ERROR_COUNT=$(docker logs test-qbittorrent --tail 50 2>&1 | grep -i -c -E "(error|fatal|exception)" || true)
+          if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "   ⚠ Found $ERROR_COUNT error(s):"
+              docker logs test-qbittorrent --tail 50 2>&1 | grep -i -E "(error|fatal|exception)" || true
+          else
+              echo "   ✓ No errors found in logs"
+          fi
+          echo ""
+
+          echo "✅ Log analysis complete"
 
       - name: Cleanup test environment
         if: always()
         run: |
           echo "=== Cleanup ==="
+          echo ""
+
+          echo "🧹 Stopping and removing containers..."
           docker compose -f docker-compose.test.yml down -v --remove-orphans || true
+          echo "   ✓ Containers removed"
+          echo ""
+
+          echo "🧹 Removing test directories..."
           sudo rm -rf /tmp/test-docker /tmp/test-media || true
+          echo "   ✓ Test directories cleaned up"
+          echo ""
+
+          echo "✅ Cleanup complete"
 
   security-validation:
     name: Security Validation
@@ -930,8 +1003,21 @@ jobs:
     if: always()
 
     steps:
+      - name: Debug - Show all job results
+        run: |
+          echo "=== DEBUG: Job Results ==="
+          echo "system-validation: ${{ needs.system-validation.result }}"
+          echo "docker-environment-validation: ${{ needs.docker-environment-validation.result }}"
+          echo "gluetun-vpn-validation: ${{ needs.gluetun-vpn-validation.result }}"
+          echo "port-accessibility-tests: ${{ needs.port-accessibility-tests.result }}"
+          echo "file-permissions-validation: ${{ needs.file-permissions-validation.result }}"
+          echo "integration-health-checks: ${{ needs.integration-health-checks.result }}"
+          echo "security-validation: ${{ needs.security-validation.result }}"
+          echo "=========================="
+
       - name: Create validation summary
         run: |
+          echo "=== DEBUG: Starting validation summary creation ==="
           echo "# 🧪 Comprehensive Testing Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Validation Area | Status |" >> $GITHUB_STEP_SUMMARY
@@ -948,6 +1034,15 @@ jobs:
       - name: Determine overall validation status
         id: overall-status
         run: |
+          echo "=== DEBUG: Determining overall validation status ==="
+          echo "Checking system-validation: ${{ needs.system-validation.result }}"
+          echo "Checking docker-environment-validation: ${{ needs.docker-environment-validation.result }}"
+          echo "Checking gluetun-vpn-validation: ${{ needs.gluetun-vpn-validation.result }}"
+          echo "Checking port-accessibility-tests: ${{ needs.port-accessibility-tests.result }}"
+          echo "Checking file-permissions-validation: ${{ needs.file-permissions-validation.result }}"
+          echo "Checking integration-health-checks: ${{ needs.integration-health-checks.result }}"
+          echo "Checking security-validation: ${{ needs.security-validation.result }}"
+
           if [[ "${{ needs.system-validation.result }}" == "success" && \
                 "${{ needs.docker-environment-validation.result }}" == "success" && \
                 "${{ needs.gluetun-vpn-validation.result }}" == "success" && \
@@ -956,119 +1051,164 @@ jobs:
                 "${{ needs.security-validation.result }}" == "success" ]]; then
 
             if [[ "${{ needs.integration-health-checks.result }}" == "success" ]]; then
+              echo "DEBUG: All validations including integration passed"
               echo "status=all-pass" >> $GITHUB_OUTPUT
               echo "message=🎉 All validations passed successfully!" >> $GITHUB_OUTPUT
               echo "color=28a745" >> $GITHUB_OUTPUT
             else
+              echo "DEBUG: Core validations passed, integration tests had issues or were skipped"
               echo "status=core-pass" >> $GITHUB_OUTPUT
               echo "message=✅ Core validations passed, integration tests had issues" >> $GITHUB_OUTPUT
               echo "color=ffc107" >> $GITHUB_OUTPUT
             fi
           else
+            echo "DEBUG: Some validation checks failed"
             echo "status=failures" >> $GITHUB_OUTPUT
             echo "message=❌ Some validation checks failed" >> $GITHUB_OUTPUT
             echo "color=dc3545" >> $GITHUB_OUTPUT
           fi
 
+          echo "=== DEBUG: Overall status determined ==="
+          echo "Status: $(cat $GITHUB_OUTPUT | grep status= || echo 'NOT SET')"
+
       - name: Create detailed summary
         run: |
+          echo "=== DEBUG: Creating detailed summary ==="
+          echo "=== DEBUG: Initializing counters ==="
           echo "## 📋 Validation Details" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ✅ Successful Validations:" >> $GITHUB_STEP_SUMMARY
 
           success_count=0
+          echo "DEBUG: success_count initialized to $success_count"
+
+          echo "DEBUG: Checking system-validation result: ${{ needs.system-validation.result }}"
           if [[ "${{ needs.system-validation.result }}" == "success" ]]; then
+            echo "DEBUG: system-validation SUCCESS - incrementing success_count"
             echo "- **System Prerequisites**: Docker & Compose working correctly" >> $GITHUB_STEP_SUMMARY
-            ((success_count++))
+            success_count=$((success_count + 1))
+            echo "DEBUG: success_count is now $success_count"
           fi
 
+          echo "DEBUG: Checking docker-environment-validation result: ${{ needs.docker-environment-validation.result }}"
           if [[ "${{ needs.docker-environment-validation.result }}" == "success" ]]; then
+            echo "DEBUG: docker-environment-validation SUCCESS - incrementing success_count"
             echo "- **Docker Environment**: Environment variables, compose generation, volume mounts validated" >> $GITHUB_STEP_SUMMARY
-            ((success_count++))
+            success_count=$((success_count + 1))
+            echo "DEBUG: success_count is now $success_count"
           fi
 
           if [[ "${{ needs.gluetun-vpn-validation.result }}" == "success" ]]; then
             echo "- **VPN Configuration**: Gluetun setup and routing configuration validated" >> $GITHUB_STEP_SUMMARY
-            ((success_count++))
+            success_count=$((success_count + 1))
           fi
 
           if [[ "${{ needs.port-accessibility-tests.result }}" == "success" ]]; then
             echo "- **Port Accessibility**: Service ports and connectivity tested" >> $GITHUB_STEP_SUMMARY
-            ((success_count++))
+            success_count=$((success_count + 1))
           fi
 
           if [[ "${{ needs.file-permissions-validation.result }}" == "success" ]]; then
             echo "- **File Permissions**: Directory structure and permission mappings verified" >> $GITHUB_STEP_SUMMARY
-            ((success_count++))
+            success_count=$((success_count + 1))
           fi
 
           if [[ "${{ needs.integration-health-checks.result }}" == "success" ]]; then
             echo "- **Integration Health**: End-to-end service deployment and health validation" >> $GITHUB_STEP_SUMMARY
-            ((success_count++))
+            success_count=$((success_count + 1))
           fi
 
           if [[ "${{ needs.security-validation.result }}" == "success" ]]; then
             echo "- **Security Validation**: Code security, dependency safety, and Docker security practices" >> $GITHUB_STEP_SUMMARY
-            ((success_count++))
+            success_count=$((success_count + 1))
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ❌ Failed Validations:" >> $GITHUB_STEP_SUMMARY
 
+          echo "=== DEBUG: Counting failures ==="
           failure_count=0
-          if [[ "${{ needs.system-validation.result }}" != "success" ]]; then
+          echo "DEBUG: failure_count initialized to $failure_count"
+          echo "DEBUG: Checking system-validation for failure: ${{ needs.system-validation.result }}"
+          if [[ "${{ needs.system-validation.result }}" != "success" && "${{ needs.system-validation.result }}" != "skipped" ]]; then
+            echo "DEBUG: system-validation FAILED - incrementing failure_count"
             echo "- **System Prerequisites**: ${{ needs.system-validation.result }}" >> $GITHUB_STEP_SUMMARY
-            ((failure_count++))
+            failure_count=$((failure_count + 1))
+            echo "DEBUG: failure_count is now $failure_count"
           fi
 
-          if [[ "${{ needs.docker-environment-validation.result }}" != "success" ]]; then
+          if [[ "${{ needs.docker-environment-validation.result }}" != "success" && "${{ needs.docker-environment-validation.result }}" != "skipped" ]]; then
             echo "- **Docker Environment**: ${{ needs.docker-environment-validation.result }}" >> $GITHUB_STEP_SUMMARY
-            ((failure_count++))
+            failure_count=$((failure_count + 1))
           fi
 
-          if [[ "${{ needs.gluetun-vpn-validation.result }}" != "success" ]]; then
+          if [[ "${{ needs.gluetun-vpn-validation.result }}" != "success" && "${{ needs.gluetun-vpn-validation.result }}" != "skipped" ]]; then
             echo "- **VPN Configuration**: ${{ needs.gluetun-vpn-validation.result }}" >> $GITHUB_STEP_SUMMARY
-            ((failure_count++))
+            failure_count=$((failure_count + 1))
           fi
 
-          if [[ "${{ needs.port-accessibility-tests.result }}" != "success" ]]; then
+          if [[ "${{ needs.port-accessibility-tests.result }}" != "success" && "${{ needs.port-accessibility-tests.result }}" != "skipped" ]]; then
             echo "- **Port Accessibility**: ${{ needs.port-accessibility-tests.result }}" >> $GITHUB_STEP_SUMMARY
-            ((failure_count++))
+            failure_count=$((failure_count + 1))
           fi
 
-          if [[ "${{ needs.file-permissions-validation.result }}" != "success" ]]; then
+          if [[ "${{ needs.file-permissions-validation.result }}" != "success" && "${{ needs.file-permissions-validation.result }}" != "skipped" ]]; then
             echo "- **File Permissions**: ${{ needs.file-permissions-validation.result }}" >> $GITHUB_STEP_SUMMARY
-            ((failure_count++))
+            failure_count=$((failure_count + 1))
           fi
 
-          if [[ "${{ needs.integration-health-checks.result }}" != "success" ]]; then
+          if [[ "${{ needs.integration-health-checks.result }}" != "success" && "${{ needs.integration-health-checks.result }}" != "skipped" ]]; then
             echo "- **Integration Health**: ${{ needs.integration-health-checks.result }}" >> $GITHUB_STEP_SUMMARY
-            ((failure_count++))
+            failure_count=$((failure_count + 1))
           fi
 
-          if [[ "${{ needs.security-validation.result }}" != "success" ]]; then
+          if [[ "${{ needs.security-validation.result }}" != "success" && "${{ needs.security-validation.result }}" != "skipped" ]]; then
             echo "- **Security Validation**: ${{ needs.security-validation.result }}" >> $GITHUB_STEP_SUMMARY
-            ((failure_count++))
+            failure_count=$((failure_count + 1))
           fi
 
+          echo "DEBUG: Final failure_count: $failure_count"
           if [[ $failure_count -eq 0 ]]; then
+            echo "DEBUG: No failures detected"
             echo "None! 🎉" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📊 Summary Statistics:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Total Validations**: 7" >> $GITHUB_STEP_SUMMARY
+
+          echo "=== DEBUG: Calculating statistics ==="
+          echo "DEBUG: Final success_count: $success_count"
+          echo "DEBUG: Final failure_count: $failure_count"
+
+          total_count=$((success_count + failure_count))
+          echo "DEBUG: total_count calculated: $total_count"
+
+          if [[ $total_count -gt 0 ]]; then
+            echo "DEBUG: Calculating success rate (total > 0)"
+            success_rate=$(( success_count * 100 / total_count ))
+            echo "DEBUG: success_rate calculated: $success_rate"
+          else
+            echo "DEBUG: total_count is 0, setting success_rate to 0"
+            success_rate=0
+          fi
+
+          echo "- **Total Validations**: $total_count" >> $GITHUB_STEP_SUMMARY
           echo "- **Successful**: $success_count" >> $GITHUB_STEP_SUMMARY
           echo "- **Failed**: $failure_count" >> $GITHUB_STEP_SUMMARY
-          echo "- **Success Rate**: $(( success_count * 100 / 7 ))%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Success Rate**: ${success_rate}%" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Overall Status**: ${{ steps.overall-status.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+
+          echo "=== DEBUG: Detailed summary creation completed successfully ==="
 
       - name: Fail job if validations failed
         if: steps.overall-status.outputs.status == 'failures'
         run: |
+          echo "=== DEBUG: Entering failure step ==="
+          echo "Status value: ${{ steps.overall-status.outputs.status }}"
           echo "❌ Comprehensive validation failed - one or more validation checks did not pass"
           echo "Check the summary above for details on which validations failed"
+          echo "=== DEBUG: Exiting with status 1 ==="
           exit 1
 
       - name: Create issue on failure
