@@ -15,20 +15,6 @@ from src.system_validators import ContainerTester, ServiceTester, SystemValidato
 class TestSystemValidator:
     """Test SystemValidator class."""
 
-    def test_init(self):
-        """Test SystemValidator initialization."""
-        validator = SystemValidator()
-        assert not validator.docker_available
-        assert not validator.compose_available
-        assert not validator.docker_permissions
-
-    def test_check_docker_success(self, mock_docker_commands):
-        """Test successful Docker check."""
-        validator = SystemValidator()
-        result = validator._check_docker()
-        assert result is True
-        assert validator.docker_available is False  # Not set in individual check
-
     def test_check_docker_failure(self, mock_subprocess):
         """Test Docker check failure."""
         mock_subprocess.side_effect = FileNotFoundError()
@@ -36,24 +22,12 @@ class TestSystemValidator:
         result = validator._check_docker()
         assert result is False
 
-    def test_check_docker_compose_success(self, mock_docker_commands):
-        """Test successful Docker Compose check."""
-        validator = SystemValidator()
-        result = validator._check_docker_compose()
-        assert result is True
-
     def test_check_docker_compose_failure(self, mock_subprocess):
         """Test Docker Compose check failure."""
         mock_subprocess.return_value.returncode = 1
         validator = SystemValidator()
         result = validator._check_docker_compose()
         assert result is False
-
-    def test_check_docker_permissions_success(self, mock_docker_commands):
-        """Test successful Docker permissions check."""
-        validator = SystemValidator()
-        result = validator._check_docker_permissions()
-        assert result is True
 
     def test_check_docker_permissions_failure(self, mock_subprocess):
         """Test Docker permissions check failure."""

@@ -512,6 +512,7 @@ class TestServiceHealthChecker:
         assert "Failed to export health report" in captured.out
 
 
+@pytest.mark.integration
 class TestHealthCheckerIntegration:
     """Integration tests for ServiceHealthChecker."""
 
@@ -591,10 +592,10 @@ class TestHealthCheckerIntegration:
 
 
 @pytest.mark.integration
+@pytest.mark.docker
 class TestHealthCheckerLiveIntegration:
     """Live integration tests that require actual Docker environment."""
 
-    @pytest.mark.skipif(True, reason="Integration test - requires Docker")
     def test_real_docker_health_check(self, temp_dir):
         """Test health checker against real Docker environment."""
         docker_dir = temp_dir / "docker"
@@ -612,7 +613,6 @@ class TestHealthCheckerLiveIntegration:
             assert docker_health["compose_available"] is True
             assert len(docker_health["issues"]) == 0
 
-    @pytest.mark.skipif(True, reason="Integration test - requires network access")
     def test_real_port_accessibility(self, temp_dir):
         """Test port accessibility against real network stack."""
         docker_dir = temp_dir / "docker"

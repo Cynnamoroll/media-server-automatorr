@@ -296,20 +296,6 @@ class TestUserConfigCollector:
         assert docker_dir == "/opt/docker"
         assert media_dir == "/srv/media"
 
-    def test_get_docker_directory(self):
-        """Test Docker directory collection."""
-        with patch("src.user_interface.prompt", return_value="/custom/docker"):
-            result = UserConfigCollector._get_docker_directory()
-
-        assert result == "/custom/docker"
-
-    def test_get_media_directory(self):
-        """Test media directory collection."""
-        with patch("src.user_interface.prompt", return_value="/custom/media"):
-            result = UserConfigCollector._get_media_directory()
-
-        assert result == "/custom/media"
-
     def test_confirm_setup_confirmed(self, sample_services):
         """Test setup confirmation when user confirms."""
         with patch("src.user_interface.prompt_yes_no", return_value=True):

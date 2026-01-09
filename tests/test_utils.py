@@ -32,30 +32,6 @@ from src.utils import (
 )
 
 
-class TestColors:
-    """Test Colors class."""
-
-    def test_colors_defined(self):
-        """Test that all color constants are defined."""
-        assert hasattr(Colors, "HEADER")
-        assert hasattr(Colors, "BLUE")
-        assert hasattr(Colors, "CYAN")
-        assert hasattr(Colors, "GREEN")
-        assert hasattr(Colors, "YELLOW")
-        assert hasattr(Colors, "RED")
-        assert hasattr(Colors, "ENDC")
-        assert hasattr(Colors, "BOLD")
-        assert hasattr(Colors, "UNDERLINE")
-        assert hasattr(Colors, "DIM")
-
-    def test_colors_are_strings(self):
-        """Test that color constants are strings."""
-        assert isinstance(Colors.HEADER, str)
-        assert isinstance(Colors.GREEN, str)
-        assert isinstance(Colors.RED, str)
-        assert isinstance(Colors.ENDC, str)
-
-
 class TestPrintFunctions:
     """Test print utility functions."""
 

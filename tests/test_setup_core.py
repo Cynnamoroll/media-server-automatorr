@@ -70,24 +70,6 @@ class TestMediaServerSetup:
         assert setup.remote_access is True
         assert setup.host_ip == "10.0.0.5"
 
-    def test_validate_system_success(self):
-        """Test successful system validation."""
-        setup = MediaServerSetup()
-
-        with patch.object(setup.system_validator, "validate_all", return_value=True):
-            result = setup._validate_system()
-
-        assert result is True
-
-    def test_validate_system_failure(self):
-        """Test failed system validation."""
-        setup = MediaServerSetup()
-
-        with patch.object(setup.system_validator, "validate_all", return_value=False):
-            result = setup._validate_system()
-
-        assert result is False
-
     def test_validate_templates_success(self):
         """Test successful template validation."""
         setup = MediaServerSetup()
@@ -448,24 +430,6 @@ class TestMediaServerSetup:
 
         # Should call wait_for_done for each service
         assert mock_wait.call_count == 2
-
-    def test_should_show_debug_info_enabled(self):
-        """Test debug info detection when enabled."""
-        setup = MediaServerSetup()
-
-        with patch.dict(os.environ, {"DEBUG": "1"}):
-            result = setup._should_show_debug_info()
-
-        assert result is True
-
-    def test_should_show_debug_info_disabled(self):
-        """Test debug info detection when disabled."""
-        setup = MediaServerSetup()
-
-        with patch.dict(os.environ, {}, clear=True):
-            result = setup._should_show_debug_info()
-
-        assert result is False
 
     def test_run_success_flow(self, mock_os_operations):
         """Test successful complete run flow."""

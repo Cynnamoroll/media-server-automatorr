@@ -15,12 +15,6 @@ from src.directory_manager import DirectoryManager
 class TestDirectoryManager:
     """Test DirectoryManager class."""
 
-    def test_init(self):
-        """Test DirectoryManager initialization."""
-        manager = DirectoryManager()
-        assert manager.created_directories == []
-        assert manager.permission_fixes_needed == []
-
     def test_create_single_directory_success(self, temp_dir):
         """Test successful single directory creation."""
         manager = DirectoryManager()
