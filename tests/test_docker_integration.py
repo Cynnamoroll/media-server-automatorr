@@ -525,9 +525,9 @@ class TestDockerComposeEndToEnd:
                 cwd=output_dir,
             )
 
-            assert up_result.returncode == 0, (
-                f"Failed to start containers: {up_result.stderr}"
-            )
+            assert (
+                up_result.returncode == 0
+            ), f"Failed to start containers: {up_result.stderr}"
 
             # Give containers time to start
             time.sleep(5)
@@ -676,9 +676,9 @@ class TestDockerComposeEndToEnd:
             try:
                 result = sock.connect_ex(("127.0.0.1", 8096))
                 # Port should be open (connect_ex returns 0 on success)
-                assert result == 0, (
-                    f"Port 8096 not accessible, connection result: {result}"
-                )
+                assert (
+                    result == 0
+                ), f"Port 8096 not accessible, connection result: {result}"
             finally:
                 sock.close()
 
@@ -853,9 +853,9 @@ class TestDockerComposeEndToEnd:
             )
 
             # Config directory should exist
-            assert exec_result.returncode == 0, (
-                f"Config directory not accessible in container. Error: {exec_result.stderr}"
-            )
+            assert (
+                exec_result.returncode == 0
+            ), f"Config directory not accessible in container. Error: {exec_result.stderr}"
 
         except subprocess.TimeoutExpired as e:
             pytest.fail(f"Container operations timed out: {e}")

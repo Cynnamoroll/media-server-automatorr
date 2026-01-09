@@ -28,22 +28,25 @@ from urllib.error import URLError
 
 class Colors:
     """ANSI color codes for terminal output."""
-    RED = '\033[91m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    MAGENTA = '\033[95m'
-    CYAN = '\033[96m'
-    WHITE = '\033[97m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
+
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    MAGENTA = "\033[95m"
+    CYAN = "\033[96m"
+    WHITE = "\033[97m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    END = "\033[0m"
 
 
 class ValidationResult:
     """Represents the result of a validation check."""
 
-    def __init__(self, name: str, success: bool, message: str = "", details: List[str] = None):
+    def __init__(
+        self, name: str, success: bool, message: str = "", details: List[str] = None
+    ):
         self.name = name
         self.success = success
         self.message = message
@@ -54,7 +57,9 @@ class ValidationResult:
 class PipelineValidator:
     """Runs local validation of CI/CD pipeline components."""
 
-    def __init__(self, verbose: bool = False, skip_integration: bool = False, timeout: int = 300):
+    def __init__(
+        self, verbose: bool = False, skip_integration: bool = False, timeout: int = 300
+    ):
         self.verbose = verbose
         self.skip_integration = skip_integration
         self.timeout = timeout
@@ -83,7 +88,9 @@ class PipelineValidator:
         print(f"{Colors.BOLD}{Colors.CYAN}{message.center(60)}{Colors.END}")
         print(f"{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.END}\n")
 
-    def run_command(self, cmd: List[str], cwd: Path = None, timeout: int = 60) -> Tuple[int, str, str]:
+    def run_command(
+        self, cmd: List[str], cwd: Path = None, timeout: int = 60
+    ) -> Tuple[int, str, str]:
         """Run a command and return return code, stdout, stderr."""
         try:
             result = subprocess.run(
@@ -91,7 +98,7 @@ class PipelineValidator:
                 cwd=cwd or self.project_root,
                 capture_output=True,
                 text=True,
-                timeout=timeout
+                timeout=timeout,
             )
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
@@ -112,7 +119,7 @@ class PipelineValidator:
 
         try:
             # Import from src package
-            module = importlib.import_module(f'src.{module_name}')
+            module = importlib.import_module(f"src.{module_name}")
             return module
         except Exception as e:
             raise ImportError(f"Failed to load {module_name}: {str(e)}")
@@ -126,13 +133,15 @@ class PipelineValidator:
             # Check Python version
             python_version = sys.version_info
             if python_version >= (3, 8):
-                details.append(f"✓ Python {python_version.major}.{python_version.minor}.{python_version.micro}")
+                details.append(
+                    f"✓ Python {python_version.major}.{python_version.minor}.{python_version.micro}"
+                )
             else:
                 return ValidationResult(
                     "System Prerequisites",
                     False,
                     f"Python {python_version.major}.{python_version.minor} < 3.8 (required)",
-                    details
+                    details,
                 )
 
             # Check Docker
@@ -144,7 +153,7 @@ class PipelineValidator:
                     "System Prerequisites",
                     False,
                     "Docker not available",
-                    details + [f"Error: {stderr}"]
+                    details + [f"Error: {stderr}"],
                 )
 
             # Check Docker Compose
@@ -156,7 +165,7 @@ class PipelineValidator:
                     "System Prerequisites",
                     False,
                     "Docker Compose not available",
-                    details + [f"Error: {stderr}"]
+                    details + [f"Error: {stderr}"],
                 )
 
             # Check Docker permissions
@@ -168,14 +177,14 @@ class PipelineValidator:
                     "System Prerequisites",
                     False,
                     "Cannot run Docker without sudo",
-                    details + ["Try: sudo usermod -aG docker $USER && newgrp docker"]
+                    details + ["Try: sudo usermod -aG docker $USER && newgrp docker"],
                 )
 
             # Check required Python packages
             required_packages = [
                 ("pytest", "pytest"),
                 ("PyYAML", "yaml"),
-                ("requests", "requests")
+                ("requests", "requests"),
             ]
             for package_name, import_name in required_packages:
                 try:
@@ -186,22 +195,19 @@ class PipelineValidator:
                         "System Prerequisites",
                         False,
                         f"Missing Python package: {package_name}",
-                        details + [f"Try: pip install {package_name}"]
+                        details + [f"Try: pip install {package_name}"],
                     )
 
             result = ValidationResult(
                 "System Prerequisites",
                 True,
                 "All system prerequisites available",
-                details
+                details,
             )
 
         except Exception as e:
             result = ValidationResult(
-                "System Prerequisites",
-                False,
-                f"Validation failed: {str(e)}",
-                details
+                "System Prerequisites", False, f"Validation failed: {str(e)}", details
             )
 
         result.duration = time.time() - start_time
@@ -216,25 +222,24 @@ class PipelineValidator:
             # Test Docker Compose generation
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
-                docker_dir = temp_path / 'docker'
-                media_dir = temp_path / 'media'
+                docker_dir = temp_path / "docker"
+                media_dir = temp_path / "media"
                 docker_dir.mkdir()
                 media_dir.mkdir()
 
                 try:
                     # Load required modules
                     template_loader_module = self.load_project_module("template_loader")
-                    compose_generator_module = self.load_project_module("compose_generator")
+                    compose_generator_module = self.load_project_module(
+                        "compose_generator"
+                    )
 
                     TemplateLoader = template_loader_module.TemplateLoader
                     ComposeGenerator = compose_generator_module.ComposeGenerator
                     details.append("✓ Template loader and compose generator imports")
                 except Exception as e:
                     return ValidationResult(
-                        "Docker Environment",
-                        False,
-                        f"Import failed: {str(e)}",
-                        details
+                        "Docker Environment", False, f"Import failed: {str(e)}", details
                     )
 
                 # Test template loading
@@ -242,19 +247,21 @@ class PipelineValidator:
                     loader = TemplateLoader()
                     services = loader.get_services()
                     categories = loader.get_categories()
-                    details.append(f"✓ Loaded {len(services)} services, {len(categories)} categories")
+                    details.append(
+                        f"✓ Loaded {len(services)} services, {len(categories)} categories"
+                    )
                 except Exception as e:
                     return ValidationResult(
                         "Docker Environment",
                         False,
                         f"Template loading failed: {str(e)}",
-                        details
+                        details,
                     )
 
                 # Test compose generation
                 try:
                     generator = ComposeGenerator(loader)
-                    test_services = ['jellyfin', 'qbittorrent', 'sonarr']
+                    test_services = ["jellyfin", "qbittorrent", "sonarr"]
 
                     compose_content = generator.generate(
                         selected_services=test_services,
@@ -262,28 +269,36 @@ class PipelineValidator:
                         gid=1000,
                         docker_dir=docker_dir,
                         media_dir=media_dir,
-                        timezone='UTC'
+                        timezone="UTC",
                     )
 
                     # Validate generated content
-                    required_content = ['jellyfin:', 'qbittorrent:', 'sonarr:', 'networks:', 'media-network:']
+                    required_content = [
+                        "jellyfin:",
+                        "qbittorrent:",
+                        "sonarr:",
+                        "networks:",
+                        "media-network:",
+                    ]
                     for content in required_content:
                         if content not in compose_content:
                             return ValidationResult(
                                 "Docker Environment",
                                 False,
                                 f"Generated compose missing: {content}",
-                                details
+                                details,
                             )
 
-                    details.append(f"✓ Generated compose file ({len(compose_content)} chars)")
+                    details.append(
+                        f"✓ Generated compose file ({len(compose_content)} chars)"
+                    )
 
                 except Exception as e:
                     return ValidationResult(
                         "Docker Environment",
                         False,
                         f"Compose generation failed: {str(e)}",
-                        details
+                        details,
                     )
 
                 # Test environment variable handling
@@ -305,7 +320,7 @@ class PipelineValidator:
                             "Docker Environment",
                             False,
                             f"Encryption key too short: {len(key)} chars",
-                            details
+                            details,
                         )
                     else:
                         details.append(f"✓ Encryption key: {len(key)} chars")
@@ -315,22 +330,19 @@ class PipelineValidator:
                         "Docker Environment",
                         False,
                         f"Environment variable handling failed: {str(e)}",
-                        details
+                        details,
                     )
 
             result = ValidationResult(
                 "Docker Environment",
                 True,
                 "Docker environment validation passed",
-                details
+                details,
             )
 
         except Exception as e:
             result = ValidationResult(
-                "Docker Environment",
-                False,
-                f"Validation failed: {str(e)}",
-                details
+                "Docker Environment", False, f"Validation failed: {str(e)}", details
             )
 
         result.duration = time.time() - start_time
@@ -352,19 +364,16 @@ class PipelineValidator:
                 details.append("✓ VPN configuration imports")
             except Exception as e:
                 return ValidationResult(
-                    "VPN Configuration",
-                    False,
-                    f"VPN import failed: {str(e)}",
-                    details
+                    "VPN Configuration", False, f"VPN import failed: {str(e)}", details
                 )
 
             # Test subnet validation
             test_subnets = [
-                ('192.168.1.0/24', True),
-                ('172.17.0.0/16', True),
-                ('10.0.0.0/8', True),
-                ('invalid', False),
-                ('192.168.1.0/33', False),
+                ("192.168.1.0/24", True),
+                ("172.17.0.0/16", True),
+                ("10.0.0.0/8", True),
+                ("invalid", False),
+                ("192.168.1.0/33", False),
             ]
 
             for subnet, expected in test_subnets:
@@ -374,7 +383,7 @@ class PipelineValidator:
                         "VPN Configuration",
                         False,
                         f"Subnet validation failed for {subnet}: expected {expected}, got {result}",
-                        details
+                        details,
                     )
 
             details.append("✓ Subnet validation working correctly")
@@ -385,32 +394,35 @@ class PipelineValidator:
 
                 # Load VPN providers from constants
                 constants_module = self.load_project_module("constants")
-                providers = getattr(constants_module, 'VPN_PROVIDERS', {})
+                providers = getattr(constants_module, "VPN_PROVIDERS", {})
 
                 if not providers:
                     return ValidationResult(
                         "VPN Configuration",
                         False,
                         "No VPN providers found in constants",
-                        details
+                        details,
                     )
 
                 details.append(f"✓ Found {len(providers)} VPN providers")
 
                 # Test configuration generation
-                configurator.provider = 'nordvpn'
-                configurator.vpn_type = 'openvpn'
+                configurator.provider = "nordvpn"
+                configurator.vpn_type = "openvpn"
                 configurator.enabled = True
-                configurator.credentials = {'OPENVPN_USER': 'test', 'OPENVPN_PASSWORD': 'test'}
+                configurator.credentials = {
+                    "OPENVPN_USER": "test",
+                    "OPENVPN_PASSWORD": "test",
+                }
 
                 env_vars = configurator.get_environment_vars()
 
-                if 'VPN_SERVICE_PROVIDER' not in env_vars:
+                if "VPN_SERVICE_PROVIDER" not in env_vars:
                     return ValidationResult(
                         "VPN Configuration",
                         False,
                         "VPN_SERVICE_PROVIDER not in generated environment variables",
-                        details
+                        details,
                     )
 
                 details.append(f"✓ Generated {len(env_vars)} environment variables")
@@ -420,22 +432,19 @@ class PipelineValidator:
                     "VPN Configuration",
                     False,
                     f"VPN configurator test failed: {str(e)}",
-                    details
+                    details,
                 )
 
             result = ValidationResult(
                 "VPN Configuration",
                 True,
                 "VPN configuration validation passed",
-                details
+                details,
             )
 
         except Exception as e:
             result = ValidationResult(
-                "VPN Configuration",
-                False,
-                f"Validation failed: {str(e)}",
-                details
+                "VPN Configuration", False, f"Validation failed: {str(e)}", details
             )
 
         result.duration = time.time() - start_time
@@ -476,7 +485,7 @@ class PipelineValidator:
                 port_conflicts = {}
 
                 for service_id, service in services.items():
-                    main_port = service.get('port')
+                    main_port = service.get("port")
                     if main_port:
                         if main_port in used_ports:
                             if main_port not in port_conflicts:
@@ -486,7 +495,7 @@ class PipelineValidator:
                             used_ports.add(main_port)
 
                         # Check extra ports
-                        for extra_port in service.get('extra_ports', []):
+                        for extra_port in service.get("extra_ports", []):
                             if extra_port in used_ports:
                                 if extra_port not in port_conflicts:
                                     port_conflicts[extra_port] = []
@@ -498,33 +507,34 @@ class PipelineValidator:
                     conflict_details = []
                     for port, services in port_conflicts.items():
                         conflict_details.append(f"Port {port}: {', '.join(services)}")
-                    details.append(f"⚠ Port conflicts found: {'; '.join(conflict_details)}")
+                    details.append(
+                        f"⚠ Port conflicts found: {'; '.join(conflict_details)}"
+                    )
                 else:
                     details.append("✓ No port conflicts detected")
 
-                details.append(f"✓ Checked {len(services)} services, {len(used_ports)} unique ports")
+                details.append(
+                    f"✓ Checked {len(services)} services, {len(used_ports)} unique ports"
+                )
 
             except Exception as e:
                 return ValidationResult(
                     "Port Accessibility",
                     False,
                     f"Port configuration check failed: {str(e)}",
-                    details
+                    details,
                 )
 
             result = ValidationResult(
                 "Port Accessibility",
                 True,
                 "Port accessibility validation passed",
-                details
+                details,
             )
 
         except Exception as e:
             result = ValidationResult(
-                "Port Accessibility",
-                False,
-                f"Validation failed: {str(e)}",
-                details
+                "Port Accessibility", False, f"Validation failed: {str(e)}", details
             )
 
         result.duration = time.time() - start_time
@@ -540,24 +550,24 @@ class PipelineValidator:
                 temp_path = Path(temp_dir)
 
                 # Test Docker directory structure
-                docker_dir = temp_path / 'docker'
+                docker_dir = temp_path / "docker"
                 docker_dir.mkdir(mode=0o755)
 
-                test_services = ['jellyfin', 'qbittorrent', 'sonarr']
+                test_services = ["jellyfin", "qbittorrent", "sonarr"]
                 for service in test_services:
-                    service_dir = docker_dir / service / 'config'
+                    service_dir = docker_dir / service / "config"
                     service_dir.mkdir(parents=True, mode=0o755)
 
                     # Test write permissions
-                    test_file = service_dir / 'test.txt'
+                    test_file = service_dir / "test.txt"
                     try:
-                        test_file.write_text('test content')
+                        test_file.write_text("test content")
                         if not test_file.exists():
                             return ValidationResult(
                                 "File Permissions",
                                 False,
                                 f"File creation failed in {service_dir}",
-                                details
+                                details,
                             )
                         test_file.unlink()
                         details.append(f"✓ {service} config directory writable")
@@ -566,28 +576,28 @@ class PipelineValidator:
                             "File Permissions",
                             False,
                             f"Write test failed for {service}: {str(e)}",
-                            details
+                            details,
                         )
 
                 # Test media directory structure
-                media_dir = temp_path / 'media'
+                media_dir = temp_path / "media"
                 media_dir.mkdir(mode=0o755)
 
-                media_subdirs = ['movies', 'tv', 'music', 'downloads']
+                media_subdirs = ["movies", "tv", "music", "downloads"]
                 for subdir in media_subdirs:
                     sub_path = media_dir / subdir
                     sub_path.mkdir(mode=0o755)
 
                     # Test write permissions
-                    test_file = sub_path / 'test.txt'
+                    test_file = sub_path / "test.txt"
                     try:
-                        test_file.write_text('test content')
+                        test_file.write_text("test content")
                         if not test_file.exists():
                             return ValidationResult(
                                 "File Permissions",
                                 False,
                                 f"File creation failed in {sub_path}",
-                                details
+                                details,
                             )
                         test_file.unlink()
                         details.append(f"✓ {subdir} media directory writable")
@@ -596,7 +606,7 @@ class PipelineValidator:
                             "File Permissions",
                             False,
                             f"Write test failed for {subdir}: {str(e)}",
-                            details
+                            details,
                         )
 
                 # Test permission scenarios
@@ -605,18 +615,12 @@ class PipelineValidator:
                 details.append(f"✓ Running as UID/GID: {current_uid}/{current_gid}")
 
             result = ValidationResult(
-                "File Permissions",
-                True,
-                "File permissions validation passed",
-                details
+                "File Permissions", True, "File permissions validation passed", details
             )
 
         except Exception as e:
             result = ValidationResult(
-                "File Permissions",
-                False,
-                f"Validation failed: {str(e)}",
-                details
+                "File Permissions", False, f"Validation failed: {str(e)}", details
             )
 
         result.duration = time.time() - start_time
@@ -641,7 +645,7 @@ class PipelineValidator:
                         "Security",
                         False,
                         f"Encryption key too short: {len(key)} characters",
-                        details
+                        details,
                     )
 
                 # Check key randomness (basic test)
@@ -651,17 +655,16 @@ class PipelineValidator:
                         "Security",
                         False,
                         f"Encryption key not random enough: {unique_chars} unique characters",
-                        details
+                        details,
                     )
 
-                details.append(f"✓ Encryption key: {len(key)} chars, {unique_chars} unique")
+                details.append(
+                    f"✓ Encryption key: {len(key)} chars, {unique_chars} unique"
+                )
 
             except Exception as e:
                 return ValidationResult(
-                    "Security",
-                    False,
-                    f"Encryption key test failed: {str(e)}",
-                    details
+                    "Security", False, f"Encryption key test failed: {str(e)}", details
                 )
 
             # Check service security configuration
@@ -676,27 +679,37 @@ class PipelineValidator:
 
                 for service_id, service in services.items():
                     # Check for privileged containers
-                    if service.get('privileged'):
-                        security_issues.append(f"{service_id}: Running in privileged mode")
+                    if service.get("privileged"):
+                        security_issues.append(
+                            f"{service_id}: Running in privileged mode"
+                        )
 
                     # Check for PUID/PGID
-                    env_vars = service.get('env', [])
-                    if 'PUID' not in env_vars and service_id != 'gluetun':  # Gluetun runs as root by design
-                        security_issues.append(f"{service_id}: No PUID specified (may run as root)")
+                    env_vars = service.get("env", [])
+                    if (
+                        "PUID" not in env_vars and service_id != "gluetun"
+                    ):  # Gluetun runs as root by design
+                        security_issues.append(
+                            f"{service_id}: No PUID specified (may run as root)"
+                        )
 
                     # Check for sensitive bind mounts
-                    volumes = service.get('volumes', {})
-                    extra_volumes = service.get('extra_volumes', {})
+                    volumes = service.get("volumes", {})
+                    extra_volumes = service.get("extra_volumes", {})
                     all_volumes = {**volumes, **extra_volumes}
 
                     for host_path, container_path in all_volumes.items():
-                        if host_path in ['/etc', '/', '/var/run/docker.sock']:
-                            security_issues.append(f"{service_id}: Sensitive bind mount {host_path}")
+                        if host_path in ["/etc", "/", "/var/run/docker.sock"]:
+                            security_issues.append(
+                                f"{service_id}: Sensitive bind mount {host_path}"
+                            )
 
                 if security_issues:
                     for issue in security_issues:
                         details.append(f"⚠ {issue}")
-                    details.append("Note: Some security considerations may be intentional")
+                    details.append(
+                        "Note: Some security considerations may be intentional"
+                    )
                 else:
                     details.append("✓ No obvious security issues detected")
 
@@ -705,18 +718,20 @@ class PipelineValidator:
                     "Security",
                     False,
                     f"Security configuration check failed: {str(e)}",
-                    details
+                    details,
                 )
 
             # Test for common Python security issues
             try:
                 # Check if bandit is available
-                code, stdout, stderr = self.run_command(["bandit", "--version"], timeout=10)
+                code, stdout, stderr = self.run_command(
+                    ["bandit", "--version"], timeout=10
+                )
                 if code == 0:
                     # Run bandit security scan
-                    code, stdout, stderr = self.run_command([
-                        "bandit", "-r", "src/", "-f", "txt", "-ll"
-                    ], timeout=30)
+                    code, stdout, stderr = self.run_command(
+                        ["bandit", "-r", "src/", "-f", "txt", "-ll"], timeout=30
+                    )
 
                     if code == 0:
                         if "No issues identified" in stdout:
@@ -734,18 +749,12 @@ class PipelineValidator:
                 details.append(f"ℹ Bandit security scan skipped: {str(e)}")
 
             result = ValidationResult(
-                "Security",
-                True,
-                "Security validation passed",
-                details
+                "Security", True, "Security validation passed", details
             )
 
         except Exception as e:
             result = ValidationResult(
-                "Security",
-                False,
-                f"Validation failed: {str(e)}",
-                details
+                "Security", False, f"Validation failed: {str(e)}", details
             )
 
         result.duration = time.time() - start_time
@@ -761,7 +770,7 @@ class PipelineValidator:
                 "Integration Health",
                 True,
                 "Skipped (--skip-integration)",
-                ["ℹ Integration tests skipped by user request"]
+                ["ℹ Integration tests skipped by user request"],
             )
 
         try:
@@ -785,6 +794,7 @@ class PipelineValidator:
 
                 # Set ownership to current user to avoid permission issues
                 import os
+
                 current_uid = os.getuid()
                 current_gid = os.getgid()
 
@@ -829,7 +839,7 @@ networks:
                     docker_dir=test_docker_dir.absolute(),
                     media_dir=test_media_dir.absolute(),
                     uid=current_uid,
-                    gid=current_gid
+                    gid=current_gid,
                 )
 
                 compose_file = temp_path / "docker-compose.test.yml"
@@ -840,16 +850,17 @@ networks:
                 try:
                     # Start test container
                     self.print_info("Starting test container...")
-                    code, stdout, stderr = self.run_command([
-                        "docker", "compose", "-f", str(compose_file), "up", "-d"
-                    ], timeout=120)
+                    code, stdout, stderr = self.run_command(
+                        ["docker", "compose", "-f", str(compose_file), "up", "-d"],
+                        timeout=120,
+                    )
 
                     if code != 0:
                         return ValidationResult(
                             "Integration Health",
                             False,
                             f"Failed to start test container: {stderr}",
-                            details
+                            details,
                         )
 
                     details.append("✓ Test container started")
@@ -858,10 +869,16 @@ networks:
                     self.print_info("Waiting for container to be ready...")
                     ready = False
                     for i in range(30):  # Wait up to 60 seconds
-                        code, stdout, stderr = self.run_command([
-                            "docker", "ps", "--filter", "name=test-jellyfin",
-                            "--format", "{{.Status}}"
-                        ])
+                        code, stdout, stderr = self.run_command(
+                            [
+                                "docker",
+                                "ps",
+                                "--filter",
+                                "name=test-jellyfin",
+                                "--format",
+                                "{{.Status}}",
+                            ]
+                        )
 
                         if code == 0 and "Up" in stdout:
                             ready = True
@@ -875,7 +892,7 @@ networks:
                             "Integration Health",
                             False,
                             "Test container did not start properly",
-                            details
+                            details,
                         )
 
                     details.append("✓ Container is running")
@@ -885,7 +902,9 @@ networks:
                     port_accessible = False
                     for i in range(15):  # Wait up to 30 seconds for port
                         try:
-                            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                            with socket.socket(
+                                socket.AF_INET, socket.SOCK_STREAM
+                            ) as sock:
                                 sock.settimeout(2)
                                 result = sock.connect_ex(("localhost", 18096))
                                 if result == 0:
@@ -898,7 +917,9 @@ networks:
                     if port_accessible:
                         details.append("✓ Port 18096 accessible")
                     else:
-                        details.append("⚠ Port 18096 not accessible (container may still be starting)")
+                        details.append(
+                            "⚠ Port 18096 not accessible (container may still be starting)"
+                        )
 
                     # Test HTTP response
                     if port_accessible:
@@ -911,25 +932,27 @@ networks:
 
                     # Test file permissions with better error handling
                     try:
-                        code, stdout, stderr = self.run_command([
-                            "docker", "exec", "test-jellyfin", "test", "-w", "/config"
-                        ])
+                        code, stdout, stderr = self.run_command(
+                            ["docker", "exec", "test-jellyfin", "test", "-w", "/config"]
+                        )
 
                         if code == 0:
                             details.append("✓ Config directory writable in container")
                         else:
-                            details.append("⚠ Config directory not writable in container (expected)")
+                            details.append(
+                                "⚠ Config directory not writable in container (expected)"
+                            )
                     except Exception as e:
                         details.append(f"⚠ Permission test skipped: {str(e)}")
 
                     # Check container logs for errors
-                    code, stdout, stderr = self.run_command([
-                        "docker", "logs", "test-jellyfin", "--tail", "20"
-                    ])
+                    code, stdout, stderr = self.run_command(
+                        ["docker", "logs", "test-jellyfin", "--tail", "20"]
+                    )
 
                     if code == 0:
                         error_patterns = ["error", "fatal", "exception", "failed"]
-                        log_lines = stdout.lower().split('\n')
+                        log_lines = stdout.lower().split("\n")
                         errors_found = []
 
                         for line in log_lines:
@@ -938,7 +961,9 @@ networks:
                                     errors_found.append(line.strip())
 
                         if errors_found:
-                            details.append(f"⚠ Found {len(errors_found)} potential errors in logs")
+                            details.append(
+                                f"⚠ Found {len(errors_found)} potential errors in logs"
+                            )
                             if self.verbose:
                                 for error in errors_found[:3]:  # Show first 3 errors
                                     details.append(f"  Log error: {error}")
@@ -949,15 +974,26 @@ networks:
                     # Cleanup with better error handling
                     try:
                         self.print_info("Cleaning up test containers...")
-                        self.run_command([
-                            "docker", "compose", "-f", str(compose_file), "down", "-v", "--remove-orphans"
-                        ], timeout=60)
+                        self.run_command(
+                            [
+                                "docker",
+                                "compose",
+                                "-f",
+                                str(compose_file),
+                                "down",
+                                "-v",
+                                "--remove-orphans",
+                            ],
+                            timeout=60,
+                        )
                         details.append("✓ Test containers cleaned up")
                     except Exception as cleanup_error:
                         details.append(f"⚠ Cleanup warning: {str(cleanup_error)}")
                         # Try force cleanup
                         try:
-                            self.run_command(["docker", "rm", "-f", "test-jellyfin"], timeout=30)
+                            self.run_command(
+                                ["docker", "rm", "-f", "test-jellyfin"], timeout=30
+                            )
                         except:
                             pass
 
@@ -965,7 +1001,7 @@ networks:
                 "Integration Health",
                 True,
                 "Integration health validation passed",
-                details
+                details,
             )
 
         except Exception as e:
@@ -973,7 +1009,7 @@ networks:
                 "Integration Health",
                 False,
                 f"Integration test failed: {str(e)}",
-                details
+                details,
             )
 
         result.duration = time.time() - start_time
@@ -988,19 +1024,28 @@ networks:
             # Run pytest
             test_dir = self.project_root / "tests"
 
-            code, stdout, stderr = self.run_command([
-                "python", "-m", "pytest", str(test_dir),
-                "--tb=short", "-x", "--no-cov", "-q"
-            ], timeout=120)
+            code, stdout, stderr = self.run_command(
+                [
+                    "python",
+                    "-m",
+                    "pytest",
+                    str(test_dir),
+                    "--tb=short",
+                    "-x",
+                    "--no-cov",
+                    "-q",
+                ],
+                timeout=120,
+            )
 
             if code == 0:
                 details.append("✓ All unit tests passed")
 
                 # Parse test results for more details
-                lines = stdout.split('\n')
+                lines = stdout.split("\n")
                 test_count = 0
                 for line in lines:
-                    if '::' in line and ('PASSED' in line or 'FAILED' in line):
+                    if "::" in line and ("PASSED" in line or "FAILED" in line):
                         test_count += 1
 
                 details.append(f"✓ Ran {test_count} unit tests")
@@ -1010,22 +1055,16 @@ networks:
                     "Unit Tests",
                     False,
                     f"Unit tests failed (exit code: {code})",
-                    details + [f"Error: {stderr}", f"Output: {stdout}"]
+                    details + [f"Error: {stderr}", f"Output: {stdout}"],
                 )
 
             result = ValidationResult(
-                "Unit Tests",
-                True,
-                "Unit tests validation passed",
-                details
+                "Unit Tests", True, "Unit tests validation passed", details
             )
 
         except Exception as e:
             result = ValidationResult(
-                "Unit Tests",
-                False,
-                f"Unit test execution failed: {str(e)}",
-                details
+                "Unit Tests", False, f"Unit test execution failed: {str(e)}", details
             )
 
         result.duration = time.time() - start_time
@@ -1073,7 +1112,9 @@ networks:
                 self.print_warning("Validation interrupted by user")
                 break
             except Exception as e:
-                error_result = ValidationResult(name, False, f"Unexpected error: {str(e)}")
+                error_result = ValidationResult(
+                    name, False, f"Unexpected error: {str(e)}"
+                )
                 results.append(error_result)
                 self.print_error(f"{name}: {error_result.message}")
 
@@ -1091,7 +1132,11 @@ networks:
         print(f"Total validations: {total_tests}")
         print(f"Passed: {Colors.GREEN}{passed_tests}{Colors.END}")
         print(f"Failed: {Colors.RED}{failed_tests}{Colors.END}")
-        print(f"Success rate: {(passed_tests/total_tests*100):.1f}%" if total_tests > 0 else "0%")
+        print(
+            f"Success rate: {(passed_tests/total_tests*100):.1f}%"
+            if total_tests > 0
+            else "0%"
+        )
         print(f"Total duration: {total_duration:.1f}s")
 
         if failed_tests > 0:
@@ -1114,7 +1159,9 @@ networks:
             print(f"{Colors.RED}❌ CRITICAL ISSUES DETECTED{Colors.END}")
             print("\n❌ Multiple validations failed - please review and fix issues")
 
-    def generate_report(self, results: List[ValidationResult], output_file: Path) -> None:
+    def generate_report(
+        self, results: List[ValidationResult], output_file: Path
+    ) -> None:
         """Generate detailed validation report."""
         report = {
             "timestamp": time.time(),
@@ -1122,9 +1169,9 @@ networks:
                 "total_validations": len(results),
                 "passed": sum(1 for r in results if r.success),
                 "failed": sum(1 for r in results if not r.success),
-                "total_duration": sum(r.duration for r in results)
+                "total_duration": sum(r.duration for r in results),
             },
-            "validations": []
+            "validations": [],
         }
 
         for result in results:
@@ -1133,12 +1180,12 @@ networks:
                 "success": result.success,
                 "message": result.message,
                 "duration": result.duration,
-                "details": result.details
+                "details": result.details,
             }
             report["validations"].append(validation_data)
 
         try:
-            with open(output_file, 'w') as f:
+            with open(output_file, "w") as f:
                 json.dump(report, f, indent=2)
             self.print_success(f"Detailed report saved to: {output_file}")
         except Exception as e:
@@ -1156,32 +1203,31 @@ Examples:
   python scripts/validate-pipeline.py --verbose          # Detailed output
   python scripts/validate-pipeline.py --skip-integration # Skip Docker tests
   python scripts/validate-pipeline.py --timeout 600     # 10 minute timeout
-        """
+        """,
     )
 
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
-        help="Enable verbose output with detailed information"
+        help="Enable verbose output with detailed information",
     )
 
     parser.add_argument(
         "--skip-integration",
         action="store_true",
-        help="Skip integration tests that require Docker containers"
+        help="Skip integration tests that require Docker containers",
     )
 
     parser.add_argument(
         "--timeout",
         type=int,
         default=300,
-        help="Timeout for individual validations in seconds (default: 300)"
+        help="Timeout for individual validations in seconds (default: 300)",
     )
 
     parser.add_argument(
-        "--report",
-        type=Path,
-        help="Generate detailed JSON report to specified file"
+        "--report", type=Path, help="Generate detailed JSON report to specified file"
     )
 
     args = parser.parse_args()
@@ -1190,7 +1236,7 @@ Examples:
     validator = PipelineValidator(
         verbose=args.verbose,
         skip_integration=args.skip_integration,
-        timeout=args.timeout
+        timeout=args.timeout,
     )
 
     print(f"{Colors.BOLD}{Colors.CYAN}")
