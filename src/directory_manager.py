@@ -259,10 +259,10 @@ class DirectoryManager:
         Returns:
             Dictionary with directory information
         """
-        if not directory.exists():
-            return {"exists": False}
-
         try:
+            if not directory.exists():
+                return {"exists": False}
+
             stat_info = directory.stat()
             return {
                 "exists": True,
