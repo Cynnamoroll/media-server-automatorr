@@ -5,7 +5,10 @@ These tests require Docker to be installed and running.
 They test actual Docker operations and container management.
 """
 
+import os
+import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -13,6 +16,50 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.system_validators import ContainerTester, SystemValidator
+
+
+@pytest.fixture
+def docker_tmp_dir(request):
+    """Create a temporary directory and clean it up properly using Docker."""
+    # Create a temporary directory manually to avoid pytest's automatic cleanup
+    tmp_dir = Path(tempfile.mkdtemp(prefix="mediaserver-test-"))
+
+    def cleanup():
+        """Clean up root-owned files created by Docker containers."""
+        if tmp_dir.exists():
+            try:
+                # Use Docker to recursively change ownership and remove all files
+                subprocess.run(
+                    [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "-v",
+                        f"{tmp_dir}:/cleanup",
+                        "alpine",
+                        "sh",
+                        "-c",
+                        "find /cleanup -type d -exec chmod 777 {} \\; 2>/dev/null || true; "
+                        "find /cleanup -type f -exec chmod 666 {} \\; 2>/dev/null || true; "
+                        "rm -rf /cleanup/* /cleanup/.[!.]* /cleanup/..?* 2>/dev/null || true",
+                    ],
+                    capture_output=True,
+                    timeout=30,
+                    check=False,
+                )
+            except Exception:
+                pass
+
+            # Remove the directory itself
+            try:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+    # Register cleanup to run before pytest's own cleanup
+    request.addfinalizer(cleanup)
+
+    yield tmp_dir
 
 
 @pytest.mark.integration
@@ -337,7 +384,7 @@ class TestSystemValidatorIntegration:
 class TestDockerComposeEndToEnd:
     """End-to-end tests for docker-compose file generation and container deployment."""
 
-    def test_generate_valid_compose_file(self, tmp_path):
+    def test_generate_valid_compose_file(self, docker_tmp_dir):
         """Test that we can generate a valid docker-compose.yml that passes validation."""
         from src.file_generator import FileGenerator
         from src.template_loader import TemplateLoader
@@ -347,10 +394,10 @@ class TestDockerComposeEndToEnd:
         generator = FileGenerator(loader)
 
         # Create output directory
-        output_dir = tmp_path / "output"
+        output_dir = docker_tmp_dir / "output"
         output_dir.mkdir()
-        docker_dir = tmp_path / "docker"
-        media_dir = tmp_path / "media"
+        docker_dir = docker_tmp_dir / "docker"
+        media_dir = docker_tmp_dir / "media"
 
         # Generate files for a simple service
         results = generator.generate_all_files(
@@ -385,7 +432,7 @@ class TestDockerComposeEndToEnd:
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
             pytest.skip(f"Docker Compose not available: {e}")
 
-    def test_start_simple_container_from_generated_compose(self, tmp_path):
+    def test_start_simple_container_from_generated_compose(self, docker_tmp_dir):
         """Test starting an actual container from our generated docker-compose.yml."""
         from src.file_generator import FileGenerator
         from src.template_loader import TemplateLoader
@@ -393,10 +440,10 @@ class TestDockerComposeEndToEnd:
         loader = TemplateLoader()
         generator = FileGenerator(loader)
 
-        output_dir = tmp_path / "test_deployment"
+        output_dir = docker_tmp_dir / "test_deployment"
         output_dir.mkdir()
-        docker_dir = tmp_path / "docker"
-        media_dir = tmp_path / "media"
+        docker_dir = docker_tmp_dir / "docker"
+        media_dir = docker_tmp_dir / "media"
 
         # Generate compose file for a lightweight service
         results = generator.generate_all_files(
@@ -412,9 +459,34 @@ class TestDockerComposeEndToEnd:
         compose_file = output_dir / "docker-compose.yml"
         assert compose_file.exists()
 
-        project_name = "mediaserver-test"
+        project_name = f"mediaserver-test-{os.getpid()}"
 
         try:
+            # Cleanup any existing containers with conflicting names
+            for container in ["jellyfin", "watchtower"]:
+                subprocess.run(
+                    ["docker", "rm", "-f", container],
+                    capture_output=True,
+                    timeout=10,
+                )
+
+            # Cleanup any existing containers from previous failed runs
+            subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "-f",
+                    str(compose_file),
+                    "-p",
+                    project_name,
+                    "down",
+                    "-v",
+                ],
+                capture_output=True,
+                timeout=30,
+                cwd=output_dir,
+            )
+
             # Pull images first (don't start yet)
             pull_result = subprocess.run(
                 [
@@ -484,7 +556,11 @@ class TestDockerComposeEndToEnd:
             )
 
         except subprocess.TimeoutExpired as e:
-            pytest.skip(f"Container operations timed out: {e}")
+            pytest.fail(f"Container operations timed out: {e}")
+        except AssertionError:
+            raise
+        except Exception as e:
+            pytest.fail(f"Test failed: {e}")
 
         finally:
             # Cleanup - stop and remove containers
@@ -504,7 +580,7 @@ class TestDockerComposeEndToEnd:
                 cwd=output_dir,
             )
 
-    def test_container_port_accessibility(self, tmp_path):
+    def test_container_port_accessibility(self, docker_tmp_dir):
         """Test that containers started from generated compose are accessible on their ports."""
         import socket
 
@@ -514,10 +590,10 @@ class TestDockerComposeEndToEnd:
         loader = TemplateLoader()
         generator = FileGenerator(loader)
 
-        output_dir = tmp_path / "port_test"
+        output_dir = docker_tmp_dir / "port_test"
         output_dir.mkdir()
-        docker_dir = tmp_path / "docker"
-        media_dir = tmp_path / "media"
+        docker_dir = docker_tmp_dir / "docker"
+        media_dir = docker_tmp_dir / "media"
 
         # Generate compose with a service that has a health endpoint
         results = generator.generate_all_files(
@@ -531,9 +607,34 @@ class TestDockerComposeEndToEnd:
         )
 
         compose_file = output_dir / "docker-compose.yml"
-        project_name = "mediaserver-port-test"
+        project_name = f"mediaserver-port-test-{os.getpid()}"
 
         try:
+            # Cleanup any existing containers with conflicting names
+            for container in ["jellyfin", "watchtower"]:
+                subprocess.run(
+                    ["docker", "rm", "-f", container],
+                    capture_output=True,
+                    timeout=10,
+                )
+
+            # Cleanup any existing containers
+            subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "-f",
+                    str(compose_file),
+                    "-p",
+                    project_name,
+                    "down",
+                    "-v",
+                ],
+                capture_output=True,
+                timeout=30,
+                cwd=output_dir,
+            )
+
             # Start container
             subprocess.run(
                 [
@@ -581,10 +682,12 @@ class TestDockerComposeEndToEnd:
             finally:
                 sock.close()
 
-        except subprocess.TimeoutExpired:
-            pytest.skip("Container operations timed out")
+        except subprocess.TimeoutExpired as e:
+            pytest.fail(f"Container operations timed out: {e}")
+        except AssertionError:
+            raise
         except Exception as e:
-            pytest.skip(f"Test environment issue: {e}")
+            pytest.fail(f"Test failed: {e}")
         finally:
             # Cleanup
             subprocess.run(
@@ -603,7 +706,7 @@ class TestDockerComposeEndToEnd:
                 cwd=output_dir,
             )
 
-    def test_volume_mounts_work_correctly(self, tmp_path):
+    def test_volume_mounts_work_correctly(self, docker_tmp_dir):
         """Test that volume mounts are created and accessible in containers."""
         from src.file_generator import FileGenerator
         from src.template_loader import TemplateLoader
@@ -611,11 +714,11 @@ class TestDockerComposeEndToEnd:
         loader = TemplateLoader()
         generator = FileGenerator(loader)
 
-        output_dir = tmp_path / "volume_test"
+        output_dir = docker_tmp_dir / "volume_test"
         output_dir.mkdir()
-        docker_dir = tmp_path / "docker"
+        docker_dir = docker_tmp_dir / "docker"
         docker_dir.mkdir()
-        media_dir = tmp_path / "media"
+        media_dir = docker_tmp_dir / "media"
         media_dir.mkdir()
 
         # Create a test file in the media directory
@@ -633,9 +736,34 @@ class TestDockerComposeEndToEnd:
         )
 
         compose_file = output_dir / "docker-compose.yml"
-        project_name = "mediaserver-volume-test"
+        project_name = f"mediaserver-volume-test-{os.getpid()}"
 
         try:
+            # Cleanup any existing containers with conflicting names
+            for container in ["jellyfin", "watchtower"]:
+                subprocess.run(
+                    ["docker", "rm", "-f", container],
+                    capture_output=True,
+                    timeout=10,
+                )
+
+            # Cleanup any existing containers
+            subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "-f",
+                    str(compose_file),
+                    "-p",
+                    project_name,
+                    "down",
+                    "-v",
+                ],
+                capture_output=True,
+                timeout=30,
+                cwd=output_dir,
+            )
+
             # Start container
             subprocess.run(
                 [
@@ -687,26 +815,54 @@ class TestDockerComposeEndToEnd:
                 cwd=output_dir,
             )
 
-            container_id = container_result.stdout.strip()
+            # Get first container ID (stdout may have multiple IDs, one per line)
+            container_id = (
+                container_result.stdout.strip().split("\n")[0]
+                if container_result.stdout.strip()
+                else ""
+            )
 
-            if container_id:
-                # Check if mounted directories exist in container
-                exec_result = subprocess.run(
-                    ["docker", "exec", container_id, "ls", "-la", "/config"],
+            if not container_id:
+                # Check if containers failed to start
+                ps_all = subprocess.run(
+                    [
+                        "docker",
+                        "compose",
+                        "-f",
+                        str(compose_file),
+                        "-p",
+                        project_name,
+                        "ps",
+                        "-a",
+                    ],
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    cwd=output_dir,
+                )
+                pytest.fail(
+                    f"No running containers found. Status:\n{ps_all.stdout}\n{ps_all.stderr}"
                 )
 
-                # Config directory should exist
-                assert exec_result.returncode == 0, (
-                    "Config directory not accessible in container"
-                )
+            # Check if mounted directories exist in container
+            exec_result = subprocess.run(
+                ["docker", "exec", container_id, "ls", "-la", "/config"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
-        except subprocess.TimeoutExpired:
-            pytest.skip("Container operations timed out")
+            # Config directory should exist
+            assert exec_result.returncode == 0, (
+                f"Config directory not accessible in container. Error: {exec_result.stderr}"
+            )
+
+        except subprocess.TimeoutExpired as e:
+            pytest.fail(f"Container operations timed out: {e}")
+        except AssertionError:
+            raise
         except Exception as e:
-            pytest.skip(f"Test environment issue: {e}")
+            pytest.fail(f"Test failed with error: {e}")
         finally:
             # Cleanup
             subprocess.run(
@@ -725,7 +881,7 @@ class TestDockerComposeEndToEnd:
                 cwd=output_dir,
             )
 
-    def test_multiple_services_networking(self, tmp_path):
+    def test_multiple_services_networking(self, docker_tmp_dir):
         """Test that multiple services can communicate when using the same network."""
         from src.file_generator import FileGenerator
         from src.template_loader import TemplateLoader
@@ -733,10 +889,10 @@ class TestDockerComposeEndToEnd:
         loader = TemplateLoader()
         generator = FileGenerator(loader)
 
-        output_dir = tmp_path / "network_test"
+        output_dir = docker_tmp_dir / "network_test"
         output_dir.mkdir()
-        docker_dir = tmp_path / "docker"
-        media_dir = tmp_path / "media"
+        docker_dir = docker_tmp_dir / "docker"
+        media_dir = docker_tmp_dir / "media"
 
         # Generate compose with multiple services
         results = generator.generate_all_files(
@@ -760,7 +916,7 @@ class TestDockerComposeEndToEnd:
         # Services should be on the same network
         assert "media-network" in content or "default" in content
 
-        project_name = "mediaserver-network-test"
+        project_name = f"mediaserver-network-test-{os.getpid()}"
 
         try:
             # Validate compose file
@@ -791,21 +947,21 @@ class TestDockerComposeEndToEnd:
         except Exception as e:
             pytest.skip(f"Test environment issue: {e}")
 
-    def test_environment_variables_passed_correctly(self, tmp_path):
-        """Test that environment variables from .env are passed to containers."""
+    def test_environment_variables_passed_correctly(self, docker_tmp_dir):
+        """Test that environment variables are correctly set in generated files."""
         from src.file_generator import FileGenerator
         from src.template_loader import TemplateLoader
 
         loader = TemplateLoader()
         generator = FileGenerator(loader)
 
-        output_dir = tmp_path / "env_test"
+        output_dir = docker_tmp_dir / "env_test"
         output_dir.mkdir()
-        docker_dir = tmp_path / "docker"
-        media_dir = tmp_path / "media"
+        docker_dir = docker_tmp_dir / "docker"
+        media_dir = docker_tmp_dir / "media"
 
         results = generator.generate_all_files(
-            selected_services=["jellyfin"],
+            selected_services=["sonarr"],
             uid=1000,
             gid=1000,
             docker_dir=docker_dir,
@@ -820,12 +976,12 @@ class TestDockerComposeEndToEnd:
         # Verify .env file was created
         assert env_file.exists()
 
-        # Check .env contains expected variables
+        # Check .env contains timezone
         env_content = env_file.read_text()
-        assert "PUID=1000" in env_content
-        assert "PGID=1000" in env_content
         assert "TZ=America/New_York" in env_content
 
-        # Verify compose references the .env file or has environment section
+        # Verify compose file has PUID/PGID set directly (not as env var references)
         compose_content = compose_file.read_text()
-        assert "environment:" in compose_content or "env_file:" in compose_content
+        assert "PUID=1000" in compose_content
+        assert "PGID=1000" in compose_content
+        assert "environment:" in compose_content
