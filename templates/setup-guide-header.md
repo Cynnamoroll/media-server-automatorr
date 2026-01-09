@@ -10,6 +10,7 @@ Generated on {timestamp}
 | Docker Directory | {docker_dir} |
 | Media Directory | {media_dir} |
 | Timezone | {timezone} |
+| Output Directory | {output_dir} |
 
 ## Starting the Services
 

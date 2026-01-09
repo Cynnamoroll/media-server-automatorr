@@ -201,23 +201,25 @@ class TestMediaServerSetup:
         assert not setup.gluetun_configurator.enabled
 
     def test_configure_vpn_with_qbittorrent_enabled(self):
-        """Test VPN configuration with qBittorrent selected and VPN enabled."""
+        """Test VPN configuration with qBittorrent and gluetun selected and VPN enabled."""
         setup = MediaServerSetup()
-        setup.selected_services = ["qbittorrent"]
+        setup.selected_services = ["gluetun", "qbittorrent"]
 
         with patch.object(setup.gluetun_configurator, "configure", return_value=True):
             setup._configure_vpn()
 
+        # Gluetun should remain in selected services
         assert "gluetun" in setup.selected_services
 
     def test_configure_vpn_with_qbittorrent_disabled(self):
-        """Test VPN configuration with qBittorrent selected but VPN disabled."""
+        """Test VPN configuration skipped when gluetun not selected."""
         setup = MediaServerSetup()
         setup.selected_services = ["qbittorrent"]
 
         with patch.object(setup.gluetun_configurator, "configure", return_value=False):
             setup._configure_vpn()
 
+        # Gluetun was never selected, so it shouldn't be in the list
         assert "gluetun" not in setup.selected_services
 
     def test_setup_directories_and_files_success(self, temp_dir):

@@ -203,15 +203,20 @@ class MediaServerSetup:
             sys.exit(0)
 
     def _configure_vpn(self) -> None:
-        """Configure VPN if user wants it and qBittorrent is selected."""
+        """Configure VPN if user selected gluetun and qBittorrent is selected."""
+        # Only configure VPN if user explicitly selected gluetun during service selection
+        if "gluetun" not in self.selected_services:
+            print_info("VPN configuration skipped (gluetun not selected)")
+            return
+
         if "qbittorrent" not in self.selected_services:
             print_info("VPN configuration skipped (no torrent client selected)")
             return
 
+        # User selected gluetun, so configure it
         if self.gluetun_configurator.configure():
-            # Add gluetun to selected services if not already present
-            if "gluetun" not in self.selected_services:
-                self.selected_services.insert(0, "gluetun")
+            # Gluetun is already in selected services
+            pass
 
     def _setup_directories_and_files(self) -> bool:
         """Create directories and generate configuration files."""

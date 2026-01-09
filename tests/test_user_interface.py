@@ -53,16 +53,16 @@ class TestServiceSelector:
         self, sample_services, sample_categories, capsys
     ):
         """Test category description display."""
-        services_by_category = {"media_servers": ["jellyfin"]}
+        services_by_category = {"media_server": ["jellyfin"]}
         selector = ServiceSelector(
             sample_services, sample_categories, services_by_category
         )
 
-        selector._show_category_description("media_servers")
+        selector._show_category_description("media_server")
         captured = capsys.readouterr()
-        assert "Choose your media server platform" in captured.out
+        assert "You can only select ONE" in captured.out
 
-        selector._show_category_description("arr_suite")
+        selector._show_category_description("arr")
         captured = capsys.readouterr()
         assert "Automated media management" in captured.out
 
@@ -75,13 +75,15 @@ class TestServiceSelector:
         self, sample_services, sample_categories
     ):
         """Test selecting all services in a category."""
-        services_by_category = {"media_servers": ["jellyfin"]}
+        services_by_category = {"media_server": ["jellyfin"]}
         selector = ServiceSelector(
             sample_services, sample_categories, services_by_category
         )
 
         with patch("src.user_interface.prompt_yes_no", return_value=True):
-            selections = selector._select_category_services(["jellyfin"])
+            selections = selector._select_category_services(
+                ["jellyfin"], "media_server"
+            )
 
         assert selections == ["jellyfin"]
 
@@ -89,20 +91,22 @@ class TestServiceSelector:
         self, sample_services, sample_categories
     ):
         """Test selecting no services in a category."""
-        services_by_category = {"media_servers": ["jellyfin"]}
+        services_by_category = {"media_server": ["jellyfin"]}
         selector = ServiceSelector(
             sample_services, sample_categories, services_by_category
         )
 
         with patch("src.user_interface.prompt_yes_no", return_value=False):
-            selections = selector._select_category_services(["jellyfin"])
+            selections = selector._select_category_services(
+                ["jellyfin"], "media_server"
+            )
 
         assert selections == []
 
     def test_show_selection_summary(self, sample_services, sample_categories, capsys):
         """Test selection summary display."""
         services_by_category = {
-            "media_servers": ["jellyfin"],
+            "media_server": ["jellyfin"],
             "download_clients": ["qbittorrent"],
         }
         selector = ServiceSelector(

@@ -4,7 +4,7 @@ User interface utilities for media-server-automatorr.
 
 import os
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from .utils import (
     Colors,
@@ -70,7 +70,9 @@ class ServiceSelector:
             self._show_category_description(category_id)
 
             # Select services in this category
-            category_selections = self._select_category_services(service_list)
+            category_selections = self._select_category_services(
+                service_list, category_id
+            )
             self.selected_services.extend(category_selections)
 
             print()  # Add spacing between categories
@@ -78,22 +80,28 @@ class ServiceSelector:
     def _show_category_description(self, category_id: str) -> None:
         """Show helpful description for each category."""
         descriptions = {
-            "media_servers": "Choose your media server platform. Most users need only one.",
-            "arr_suite": "Automated media management tools. Choose based on your content types.",
-            "indexers": "Tools to find content. Choose Prowlarr (recommended) or Jackett.",
-            "download_clients": "Download and manage your content transfers.",
-            "companion_apps": "Additional features like subtitles, requests, and monitoring.",
-            "dashboards": "Web interfaces to manage all your services in one place.",
+            "media_server": "Choose your media server platform. You can only select ONE.",
+            "arr": "Automated media management tools. Choose based on your content types.",
+            "indexer": "Tools to find content. Choose Prowlarr (recommended) OR Jackett (not both).",
+            "downloader": "Download and manage your content transfers.",
+            "companion": "Additional features like subtitles, requests, and monitoring.",
+            "dashboard": "Web interfaces to manage all your services in one place.",
             "utility": "Supporting services like VPN and Cloudflare bypass.",
-            "usenet": "Usenet download clients (alternative to torrents).",
+            "download": "Usenet download clients (alternative to torrents).",
         }
 
         if category_id in descriptions:
             print(f"{Colors.DIM}{descriptions[category_id]}{Colors.ENDC}\n")
 
-    def _select_category_services(self, service_list: List[str]) -> List[str]:
+    def _select_category_services(
+        self, service_list: List[str], category_id: str
+    ) -> List[str]:
         """Select services within a single category."""
         category_selections = []
+
+        # Define mutually exclusive groups
+        media_servers = {"jellyfin", "plex", "emby"}
+        indexers = {"prowlarr", "jackett"}
 
         for service_id in service_list:
             service = self.services[service_id]
@@ -107,6 +115,23 @@ class ServiceSelector:
             if context:
                 description += f" {context}"
 
+            # Check if this service conflicts with already selected services
+            if service_id in media_servers:
+                # Check if another media server is already selected
+                already_selected = media_servers.intersection(category_selections)
+                if already_selected:
+                    selected_name = self.services[list(already_selected)[0]]["name"]
+                    print_info(f"Skipping {name} (already selected {selected_name})")
+                    continue
+
+            if service_id in indexers:
+                # Check if another indexer is already selected
+                already_selected = indexers.intersection(category_selections)
+                if already_selected:
+                    selected_name = self.services[list(already_selected)[0]]["name"]
+                    print_info(f"Skipping {name} (already selected {selected_name})")
+                    continue
+
             # Ask for selection
             question = f"Install {name}?"
             if description:
@@ -114,7 +139,8 @@ class ServiceSelector:
 
             if prompt_yes_no(question, default=False):
                 category_selections.append(service_id)
-                print_success(f"✓ Selected: {name}")
+                # Only print one checkmark here, no duplicate
+                print(f"  {Colors.GREEN}✓{Colors.ENDC} {name}")
 
         return category_selections
 

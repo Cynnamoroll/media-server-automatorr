@@ -4,18 +4,18 @@ File generation utilities for media-server-automatorr.
 
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from .compose_generator import ComposeGenerator
 from .template_loader import TemplateLoader
 from .utils import (
-    Colors,
     generate_encryption_key,
     get_timezone,
     print_error,
     print_info,
     print_success,
-    replace_placeholders,
     run_command,
 )
 from .vpn_config import GluetunConfigurator
@@ -165,12 +165,38 @@ class FileGenerator:
             # Start building the guide
             guide_lines = []
 
+            # Get timestamp
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # Get user info
+            import pwd
+
+            try:
+                user_info = pwd.getpwuid(os.getuid())
+                username = user_info.pw_name
+                uid = user_info.pw_uid
+                gid = user_info.pw_gid
+            except:
+                username = os.getenv("USER", "unknown")
+                uid = os.getuid()
+                gid = os.getgid()
+
+            # Get timezone
+            timezone = get_timezone()
+
             # Add header with basic information
             guide_lines.append(
                 header_template.format(
+                    timestamp=timestamp,
+                    username=username,
+                    uid=uid,
+                    gid=gid,
+                    timezone=timezone,
                     docker_dir=docker_dir,
                     media_dir=media_dir,
-                    compose_dir=output_dir,
+                    output_dir=output_dir,
                 )
             )
 
@@ -227,7 +253,7 @@ class FileGenerator:
     def _generate_service_setup_section(
         self,
         service_id: str,
-        service: Dict,
+        service: Dict[str, Any],
         step_num: int,
         total_steps: int,
         gluetun_config: Optional[GluetunConfigurator],
@@ -466,8 +492,6 @@ class FileGenerator:
         compose_path = output_dir / "docker-compose.yml"
         if compose_path.exists():
             try:
-                import yaml
-
                 with open(compose_path, "r") as f:
                     yaml.safe_load(f)
             except yaml.YAMLError as e:
